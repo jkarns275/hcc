@@ -5,3 +5,5 @@ authors = ["Josh Karns <jkarns275@gmail.com>"]
 
 [dependencies]
 nom = "4.0.0"
+pest = "1.0.6"
+pest_derive = "1.0.8"

@@ -1,1 +1,0 @@
-pub const INVALID_INTEGER_LITERAL: u32 = 0;
