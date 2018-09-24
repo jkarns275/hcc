@@ -18,7 +18,7 @@ sub = _{ "-" }
 mul = _{ "*" }
 div = _{ "/" }
 modulus = _{ "%" }
-not = _{ "!" }
+not = { "!" }
 eq = _{ "=" }
 returns = _{ "->" }
 gt = { ">" }
@@ -84,7 +84,7 @@ base_expr = { true_kw | false_kw | function_call | var_reference | ptr_deref | r
 and_expr = { or_expr    ~ ( and ~ or_expr   )* }
 or_expr  = { xor_expr   ~ ( or  ~ not_expr  )* }
 xor_expr = { not_expr   ~ ( xor ~ not_expr  )* }
-not_expr = { not? ~ sum_expr }
+not_expr = { not* ~ sum_expr }
 sum_expr = { dif_expr   ~ ( add ~ dif_expr  )* }
 dif_expr = { mul_expr   ~ ( sub ~ mul_expr  )* }
 mul_expr = { div_expr   ~ ( mul ~ div_expr  )* }
