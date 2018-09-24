@@ -27,7 +27,11 @@ struct_kw = _{ "struct" }
 impl_kw = _{ "impl" }
 let_kw = _{ "let" }
 return_kw = _{ "return" }
+if_kw = _{ "if" }
+while_kw = _{ "while" }
+else_kw = _{ "else" }
 
+break_kw = { "break" }
 true_kw = { "true" }
 false_kw = { "false" }
 
@@ -64,7 +68,7 @@ var_reference = { (ident ~ dot)* ~ ident }
 ptr_deref = { mul ~ ( expr | ( lparen ~ expr ~ rparen ) ) }
 ref_to = { and ~ ident }
 construction = { ident ~ lbrace ~ ( ident ~ colon ~ expr ~ comma)* ~
- ident ~ colon ~ expr ~ comma? ~ rbrace }
+ident ~ colon ~ expr ~ comma? ~ rbrace }
 
 expr = { construction | and_expr }
 base_expr = { true_kw | false_kw | function_call | var_reference | ptr_deref | ref_to | int_literal | lparen ~ expr ~ rparen }
@@ -78,10 +82,16 @@ mul_expr = { div_expr   ~ ( mul ~ div_expr  )* }
 div_expr = { mod_expr   ~ ( div ~ mod_expr  )* }
 mod_expr = { base_expr  ~ ( modulus ~ base_expr )* }
 
+if_stmt = { if_kw ~ expr ~ lbrace ~ function_body ~ rbrace ~ 
+    ( else_kw ~ if_kw ~ expr ~ lbrace ~ function_body ~ rbrace )* 
+    ~ ( else_kw ~ lbrace ~ function_body ~ rbrace )? }
+while_stmt = { while_kw ~ expr ~ lbrace ~ function_body ~ rbrace }
+
+
 assignment = { ( var_reference | ptr_deref ) ~ eq ~ expr }
 declaration = { let_kw ~ ident ~ colon ~ ty ~ eq ~ expr }
 return_stmt = { return_kw ~ expr }
-function_body = { ((return_stmt | declaration | assignment) ~ semicolon)* }
+function_body = { ((return_stmt | break_kw | declaration | if_stmt | while_stmt | assignment) ~ semicolon)* }
 function_call = { (ident ~ dot)* ~ ident ~ lparen ~ ( expr ~ comma )* ~ expr? ~ rparen  }
 
 implementation = { impl_kw ~ ty ~ lbrace ~ struct_method* ~ rbrace }

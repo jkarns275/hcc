@@ -19,16 +19,17 @@ mod test {
     #[test]
     fn oof() {
         let pairs = ParserStruct::parse(Rule::program,
-r#"struct Point { x: i64, y: i64 }
+r#"
+struct Point { x: i64, y: i64 }
 impl Point {
     fn dist(&self, other: Point) -> i64 {
          return (self.x - other.x) + (self.y - other.y);
     }
  }
 fn main() {
-    let point: Point = Point { x: 19, y: 10 };
-
- }
+    let 😊: Point = Point { x: 19, y: 10 };
+    point.x = 10;
+}
 "#)
             .unwrap_or_else(|e| panic!("{}", e));
         println!("{:?}", pairs);
