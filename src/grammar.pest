@@ -21,6 +21,12 @@ modulus = _{ "%" }
 not = _{ "!" }
 eq = _{ "=" }
 returns = _{ "->" }
+gt = { ">" }
+lt = { "<" }
+gte = { ">=" }
+lte = { "<=" }
+equals = { "==" }
+neq = { "!=" }
 
 fn_kw = _{ "fn" }
 struct_kw = _{ "struct" }
@@ -70,7 +76,10 @@ ref_to = { and ~ ident }
 construction = { ident ~ lbrace ~ ( ident ~ colon ~ expr ~ comma)* ~
 ident ~ colon ~ expr ~ comma? ~ rbrace }
 
-expr = { construction | and_expr }
+comp_op = { gte | lte | gt | lt | equals | neq }
+cmp_expr = { (construction | and_expr) ~ (comp_op ~ (construction | and_expr))+ }
+
+expr = { construction | and_expr | cmp_expr }
 base_expr = { true_kw | false_kw | function_call | var_reference | ptr_deref | ref_to | int_literal | lparen ~ expr ~ rparen }
 and_expr = { or_expr    ~ ( and ~ or_expr   )* }
 or_expr  = { xor_expr   ~ ( or  ~ not_expr  )* }
@@ -81,6 +90,8 @@ dif_expr = { mul_expr   ~ ( sub ~ mul_expr  )* }
 mul_expr = { div_expr   ~ ( mul ~ div_expr  )* }
 div_expr = { mod_expr   ~ ( div ~ mod_expr  )* }
 mod_expr = { base_expr  ~ ( modulus ~ base_expr )* }
+
+
 
 if_stmt = { if_kw ~ expr ~ lbrace ~ function_body ~ rbrace ~ 
     ( else_kw ~ if_kw ~ expr ~ lbrace ~ function_body ~ rbrace )* 

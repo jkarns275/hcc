@@ -27,7 +27,7 @@ impl Point {
     }
  }
 fn main() {
-    let 😊: Point = Point { x: 19, y: 10 };
+    let  😊: Point = Point { x: 19, y: 10 };
     point.x = 10;
 }
 "#)
