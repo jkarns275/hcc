@@ -37,6 +37,7 @@ if_kw = _{ "if" }
 while_kw = _{ "while" }
 else_kw = _{ "else" }
 
+sizeof_kw = { "sizeof" }
 break_kw = { "break" }
 true_kw = { "true" }
 false_kw = { "false" }
@@ -79,7 +80,9 @@ ident ~ colon ~ expr ~ comma? ~ rbrace }
 comp_op = { gte | lte | gt | lt | equals | neq }
 cmp_expr = { (construction | and_expr) ~ (comp_op ~ (construction | and_expr))+ }
 
-expr = { construction | and_expr | cmp_expr }
+function_call = { var_reference ~ function_args }
+
+expr = { construction | and_expr ~ (dot ~ and_expr)* | cmp_expr }
 base_expr = { true_kw | false_kw | function_call | var_reference | ptr_deref | ref_to | int_literal | lparen ~ expr ~ rparen }
 and_expr = { or_expr    ~ ( and ~ or_expr   )* }
 or_expr  = { xor_expr   ~ ( or  ~ not_expr  )* }
@@ -89,9 +92,8 @@ sum_expr = { dif_expr   ~ ( add ~ dif_expr  )* }
 dif_expr = { mul_expr   ~ ( sub ~ mul_expr  )* }
 mul_expr = { div_expr   ~ ( mul ~ div_expr  )* }
 div_expr = { mod_expr   ~ ( div ~ mod_expr  )* }
-mod_expr = { base_expr  ~ ( modulus ~ base_expr )* }
-
-
+mod_expr = { sizeof_expr  ~ ( modulus ~ sizeof_expr )* }
+sizeof_expr = { base_expr }
 
 if_stmt = { if_kw ~ expr ~ lbrace ~ function_body ~ rbrace ~ 
     ( else_kw ~ if_kw ~ expr ~ lbrace ~ function_body ~ rbrace )* 
@@ -99,11 +101,11 @@ if_stmt = { if_kw ~ expr ~ lbrace ~ function_body ~ rbrace ~
 while_stmt = { while_kw ~ expr ~ lbrace ~ function_body ~ rbrace }
 
 
-assignment = { ( var_reference | ptr_deref ) ~ eq ~ expr }
+assignment = { expr ~ eq ~ expr }
 declaration = { let_kw ~ ident ~ colon ~ ty ~ eq ~ expr }
 return_stmt = { return_kw ~ expr }
 function_body = { ((return_stmt | break_kw | declaration | if_stmt | while_stmt | assignment) ~ semicolon)* }
-function_call = { (ident ~ dot)* ~ ident ~ lparen ~ ( expr ~ comma )* ~ expr? ~ rparen  }
+function_args = { lparen ~ ( expr ~ comma )* ~ expr? ~ rparen  }
 
 implementation = { impl_kw ~ ty ~ lbrace ~ struct_method* ~ rbrace }
 
