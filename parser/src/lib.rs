@@ -15,16 +15,12 @@ mod test {
     use pest::Parser;
     use super::{ CParser, Rule };
 
-    const simple_fn: &'static str = r#"extern i32 factorial(i32 n) {
-    if (n <= 1) return 1;
-    else return n * factorial(n - 1);
-}
-"#;
+    const binary_search_example: &'static str = include_str!("../../examples/binary_search.c");
 
     #[test]
     fn oofc() {
         let res =
-            CParser::parse(Rule::function_definition, simple_fn) //(i32 b, i32 c) {}")
+            CParser::parse(Rule::program, binary_search_example)
                 .unwrap_or_else(|e| panic!(format!("{ }", e)));
         println!("{}", res);
     }

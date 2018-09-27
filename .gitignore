@@ -1,3 +1,6 @@
-/target/
+*/target/
+*/.idea/
 /.idea/
+/target/
+*/Cargo.lock
 Cargo.lock

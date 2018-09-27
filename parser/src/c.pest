@@ -86,6 +86,7 @@ argument_expr_list = { assign_expr ~ (comma ~ assign_expr)* }
 
 unary_expr = {
       postfix_expr
+    | and ~ cast_expr
     | ( sizeof_kw ~ type_name )
     | ( sizeof_kw ~ lparen ~ type_name ~ rparen )
 }
@@ -231,3 +232,5 @@ function_definition = { declaration_specifiers? ~ declarator ~ declaration_list?
 t1 = { declarator ~ compound_stmt ~ eoi }
 
 declaration_list = { declaration+ }
+
+program = { soi ~ whitespace* ~ ( declaration | function_definition )+ ~ whitespace* ~ eoi }
