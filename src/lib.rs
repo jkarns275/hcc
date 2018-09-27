@@ -15,9 +15,15 @@ mod test {
     use pest::Parser;
     use super::{ CParser, Rule };
 
+    const simple_fn: &'static str = r#"extern i32 factorial(i32 n) {
+    if (n <= 1) return 1;
+    else return n * factorial(n - 1);
+}
+"#;
+
     #[test]
     fn oofc() {
-        let res = CParser::parse(Rule::function_definition, "int main(int a) { int b = 4; }").unwrap_or_else(|e| panic!(format!("{:?}", e)));
+        let res = CParser::parse(Rule::t1, "i32 a, i32 c").unwrap_or_else(|e| panic!(format!("{ }", e)));
         println!("{}", res);
     }
 }
