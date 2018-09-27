@@ -122,9 +122,13 @@ assign_operator = {
 expr = { assign_expr ~ ( comma ~ assign_expr )* }
 
 constant_expr = { or_expr }
-declaration = { declaration_specifiers ~ type_specifier ~ init_declarator_list? ~ semicolon }
+declaration = { declaration_specifiers ~ init_declarator_list? ~ semicolon }
 
-declaration_specifiers = { ( storage_class_specifier | type_qualifier )* }
+declaration_specifiers = {
+      ( storage_class_specifier ~ declaration_specifiers? )
+    | ( type_qualifier ~ declaration_specifiers? )
+    | ( type_specifier )
+}
 
 init_declarator_list = { init_declarator ~ ( comma ~ init_declarator )* }
 init_declarator = { declarator ~ ( eq ~ initializer )? }
@@ -168,11 +172,14 @@ pointer = {
     | ( mul ~ type_qualifier_list )
     | ( mul ~ pointer )
     | ( mul ~ type_qualifier_list ~ pointer ) }
+
 type_qualifier_list = { type_qualifier* }
 parameter_type_list = { parameter_list ~ ( comma ~ "..." )? }
 parameter_list = { parameter_declaration ~ ( comma ~ parameter_declaration )* }
 parameter_declaration = { declaration_specifiers ~ ( declarator | abstract_declarator )? }
+
 ident_list = { ident ~ ( comma ~ ident )* }
+
 type_name = { spec_qualifier_list ~ abstract_declarator? }
 abstract_declarator = { ( pointer ~ direct_abstract_declarator? ) | direct_abstract_declarator }
 
@@ -221,7 +228,6 @@ jump_stmt = {
 translation_unit = { external_declaration+ }
 external_declaration = { function_definition | declaration }
 function_definition = { declaration_specifiers? ~ declarator ~ declaration_list? ~ compound_stmt }
-t1 = { declaration_list_2 }
+t1 = { declarator ~ compound_stmt ~ eoi }
 
-declaration_list_2 = { declaration ~ ( comma ~ declaration )* }
-declaration_list = { declaration+  }
+declaration_list = { declaration+ }

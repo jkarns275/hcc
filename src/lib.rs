@@ -23,7 +23,9 @@ mod test {
 
     #[test]
     fn oofc() {
-        let res = CParser::parse(Rule::t1, "i32 a, i32 c").unwrap_or_else(|e| panic!(format!("{ }", e)));
+        let res =
+            CParser::parse(Rule::function_definition, simple_fn) //(i32 b, i32 c) {}")
+                .unwrap_or_else(|e| panic!(format!("{ }", e)));
         println!("{}", res);
     }
 }
