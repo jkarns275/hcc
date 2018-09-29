@@ -7,7 +7,7 @@ int main() {
 struct BS {
     i64* numbers;
     i64 size;
-}
+};
 
 void init_bs(struct BS* bs, i64 size) {
     i64 j, k, aux01, aux02;

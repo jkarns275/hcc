@@ -15,6 +15,8 @@ mod test {
     use pest::Parser;
     use super::{ CParser, Rule };
 
+    const _parser_text: &'static str = include_str!("c.pest");
+
     const binary_search_example: &'static str = include_str!("../../examples/binary_search.c");
 
     #[test]
