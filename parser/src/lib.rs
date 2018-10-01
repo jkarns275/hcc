@@ -12,14 +12,26 @@ struct CParser;
 
 fn apply_pre_processor(file: &str, working_dir: &str) -> String {
     use std::process::{Command, Stdio};
-    String::from_utf8_lossy(
+    let result = String::from_utf8_lossy(
         &Command::new("cpp")
             .arg(file)
+            .arg("-traditional-cpp")
             .current_dir(working_dir)
             .output()
             .unwrap().stdout[..])
-        .to_string()
+        .to_string();
+    remove_line_markers(result)
+}
 
+fn remove_line_markers(s: String) -> String {
+    let mut filtered = String::with_capacity(s.len());
+    for line in s.lines() {
+        if let Some('#') = line.chars().next() {
+            continue
+        }
+        filtered.push_str(line);
+    }
+    filtered
 }
 
 #[cfg(test)]
@@ -35,6 +47,7 @@ mod test {
     #[test]
     fn oofc() {
         let s = apply_pre_processor("binary_tree.c", "../examples");
+
         let res =
             CParser::parse(Rule::program, &s)
                 .unwrap_or_else(|e| panic!(format!("{ }", e)));

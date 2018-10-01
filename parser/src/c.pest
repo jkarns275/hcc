@@ -212,7 +212,7 @@ selection_stmt = {
 
 iteration_stmt = {
       ( while_kw ~ expr ~ stmt )
-    | ( for_kw ~ expr_stmt ~ expr_stmt ~ expr? ~ stmt )
+    | ( for_kw ~ lparen ~ declaration ~ expr_stmt ~ expr? ~ rparen ~ stmt )
 }
 
 jump_stmt =  {
@@ -231,6 +231,5 @@ t1 = { function_definition ~ eoi }
 declaration_list = { declaration+ }
 newline = { "\n" }
 string = { "\"" ~ ( !"\"" ~ any ) ~ "\"" }
-cpp_linemarkers = _{ "#" ~ ( !newline ~ any )* }
 
-program = { soi ~ pre_processor_junk ~ whitespace* ~ ( declaration | function_definition )+ ~ whitespace* ~ eoi }
+program = { soi ~ whitespace* ~ ( declaration | function_definition )+ ~ whitespace* ~ eoi }
