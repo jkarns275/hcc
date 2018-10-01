@@ -229,5 +229,8 @@ function_definition = { declaration_specifiers? ~ declarator ~ declaration_list?
 t1 = { function_definition ~ eoi }
 
 declaration_list = { declaration+ }
+newline = { "\n" }
+string = { "\"" ~ ( !"\"" ~ any ) ~ "\"" }
+cpp_linemarkers = _{ "#" ~ ( !newline ~ any )* }
 
-program = { soi ~ whitespace* ~ ( declaration | function_definition )+ ~ whitespace* ~ eoi }
+program = { soi ~ pre_processor_junk ~ whitespace* ~ ( declaration | function_definition )+ ~ whitespace* ~ eoi }
