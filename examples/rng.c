@@ -14,3 +14,11 @@ i32 xorwow(struct XorWowState* state) {
     state->state[0] = t;
     return t + (state->state[4] += 362437);
 }
+
+void seed_rng(struct XorWowState* rng) {
+    rng->state[0] = 123356245;
+    rng->state[1] = 9890890;
+    rng->state[2] = 1235555;
+    rng->state[3] = 154124;
+    rng->state[4] = 11111;
+}

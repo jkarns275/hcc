@@ -1,9 +1,3 @@
-int main() {
-    struct BS bs;
-    init_bs(&bs);
-    run_bs(&bs);
-}
-
 struct BS {
     i64* numbers;
     i64 size;
@@ -54,3 +48,11 @@ i64 search_bs(struct BS* bs, i64 f) {
     }
     return 1;
 }
+
+int main() {
+    struct BS bs;
+    init_bs(&bs);
+    run_bs(&bs);
+}
+
+

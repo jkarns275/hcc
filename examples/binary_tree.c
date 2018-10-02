@@ -42,13 +42,6 @@ i8 tree_search(struct Tree* tree, i64 key) {
     }
 }
 
-void seed_rng(struct XorWowState* rng) {
-    rng.state[0] = 123356245;
-    rng.state[1] = 9890890;
-    rng.state[2] = 1235555;
-    rng.state[3] = 00154124;
-    rng.state[4] = 11111;
-}
 
 int main() {
     struct Tree binary_tree;
@@ -58,12 +51,12 @@ int main() {
 
     struct XorWowState rng;
     seed_rng(&rng);
-    for i64 i = 0; i < 100; i += 1 {
+    for (i64 i = 0; i < 100; i += 1) {
         tree_insert(btp, xorwow(&rng));
     }
 
     seed_rng(&rng);
-    for i64 i = 0; i < 100; i += 1 {
+    for (i64 i = 0; i < 100; i += 1 {
         if tree_search(btp, xorwow(&rng)) {
             continue;
         }

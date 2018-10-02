@@ -15,7 +15,6 @@ fn apply_pre_processor(file: &str, working_dir: &str) -> String {
     let result = String::from_utf8_lossy(
         &Command::new("cpp")
             .arg(file)
-            .arg("-traditional-cpp")
             .current_dir(working_dir)
             .output()
             .unwrap().stdout[..])
@@ -30,6 +29,7 @@ fn remove_line_markers(s: String) -> String {
             continue
         }
         filtered.push_str(line);
+        filtered.push('\n');
     }
     filtered
 }
@@ -51,6 +51,6 @@ mod test {
         let res =
             CParser::parse(Rule::program, &s)
                 .unwrap_or_else(|e| panic!(format!("{ }", e)));
-        println!("{}", res);
+        println!("{:#}", res);
     }
 }
