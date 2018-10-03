@@ -1,4 +1,4 @@
-whitespace = _{ " " | "\n" | "\r" | "\t" }
+WHITESPACE = _{ " " | "\n" | "\r" | "\t" }
 
 lparen = _{ "(" }
 rparen = _{ ")" }
@@ -226,10 +226,8 @@ jump_stmt =  {
 translation_unit = { external_declaration+ }
 external_declaration = { function_definition | declaration }
 function_definition = { declaration_specifiers? ~ declarator ~ declaration_list? ~ compound_stmt }
-t1 = { function_definition ~ eoi }
+t1 = { function_definition ~ EOI }
 
 declaration_list = { declaration+ }
-newline = { "\n" }
-string = { "\"" ~ ( !"\"" ~ any ) ~ "\"" }
 
-program = { soi ~ whitespace* ~ ( declaration | function_definition )+ ~ whitespace* ~ eoi }
+program = { SOI ~ WHITESPACE* ~ ( declaration | function_definition )+ ~ WHITESPACE* ~ EOI }

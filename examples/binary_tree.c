@@ -9,7 +9,7 @@ struct Tree {
 void tree_init(struct Tree* tree) {
     tree->empty = 1;
     tree->left = 0;
-    tree->right = 0;
+    tree->right = 0
 }
 
 void tree_insert(struct Tree* tree, i64 key) {
@@ -56,7 +56,7 @@ int main() {
     }
 
     seed_rng(&rng);
-    for (i64 i = 0; i < 100; i += 1 {
+    for (i64 i = 0; i < 100; i += 1) {
         if tree_search(btp, xorwow(&rng)) {
             continue;
         }
