@@ -39,7 +39,7 @@ extern_kw = { "extern" }
 static_kw = { "static" }
 auto_kw = { "auto" }
 register_kw = { "register" }
-void_kw = { "void" }
+void_kw = { "void" | "u0" }
 int_type = { "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64" }
 union_kw = { "union" }
 struct_kw = { "struct" }
@@ -136,12 +136,12 @@ type_specifier = { void_kw | int_type | struct_or_union_spec | enum_specifier | 
 
 struct_or_union = { struct_kw | union_kw }
 struct_or_union_spec = {
-      ( struct_or_union ~ ident? ~ lbrace ~ struct_declaration_list ~ rbrace )
+      ( struct_or_union ~ (ident ~ (colon ~ struct_or_union_spec)? )? ~ lbrace ~ struct_declaration_list ~ rbrace )
     | ( struct_or_union ~ ident )
 }
 
 struct_declaration_list = { struct_declaration+ }
-struct_declaration = { spec_qualifier_list ~ struct_declarator_list ~ semicolon }
+struct_declaration = { (spec_qualifier_list ~ struct_declarator_list ~ semicolon) | function_definition }
 spec_qualifier_list = { type_qualifier* ~ type_specifier }
 struct_declarator_list = { struct_declarator ~ ( comma ~ struct_declarator )* }
 struct_declarator = {

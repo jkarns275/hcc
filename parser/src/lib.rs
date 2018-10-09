@@ -29,7 +29,7 @@ impl LineInfo {
     }
     pub fn get_file_and_line_start<'a>(&'a self, line_number: usize) -> Option<(&'a str, usize)> {
         for &(start, end, index) in self.ranges.iter() {
-            if line_number >= start && start < end {
+            if line_number >= start && line_number < end {
                 return Some((&self.filenames[index][..], start))
             }
         }
@@ -50,7 +50,6 @@ fn apply_pre_processor(file: &str, working_dir: &str) -> (String, Vec<String>, L
 }
 
 fn parse_linemarker(linemarker: &str) -> String {
-    println!("Linemarker: {}", linemarker);
     let mut string = String::with_capacity(linemarker.len());
     let mut in_quote = false;
     for ch in linemarker.chars() {
@@ -78,17 +77,17 @@ fn remove_line_markers(s: String) -> (String, Vec<String>, LineInfo) {
     let mut lines = vec![];
     for line in s.lines() {
         if let Some('#') = line.chars().next() {
-            filename = parse_linemarker(line);
             lineinfo.add_file(&filename[..], last_end, line_number);
+            filename = parse_linemarker(line);
             last_end = line_number;
             continue;
         }
         lines.push(line.to_string());
-        println!("{}. {}", line_number, line);
         line_number += 1;
         filtered.push_str(line);
         filtered.push('\n');
     }
+    lineinfo.add_file(&filename[..], last_end, line_number);
     (filtered, lines, lineinfo)
 }
 
@@ -114,11 +113,25 @@ fn parse<F: Into<Path>, F2>(file: F, working_dir: F2) -> Result<Pairs<Rule>, Err
 mod test {
     use pest::Parser;
     use super::{ CParser, Rule, apply_pre_processor };
+    use Rule::*;
 
     const _parser_text: &'static str = include_str!("c.pest");
 
     const binary_search_example: &'static str = include_str!("../../examples/binary_search.c");
     const binary_tree_example: &'static str = include_str!("../../examples/binary_tree.c");
+
+    const special_errors: &'static [(&'static [Rule], &'static str)] = &[
+        (&[gt, lt, gte, lte, equals, neq, lsh, rsh, struct_deref_op, postfix_index, postfix_call, postfix_dot, assign_operator],
+        "Are you missing a semicolon or an arithmetic operator?"),
+        (&[sizeof_expr, mul_expr],
+        "Are you missing an arithmetic operator?"),
+        (&[declaration_specifiers, storage_class_specifier, type_specifier, type_qualifier],
+        "Are you missing a type specifier?"),
+        (&[gt, lt, gte, lte, equals, neq, lsh, rsh, assign_operator],
+        "Are you missing a right-paren?"),
+        (&[abstract_declarator],
+        "Are you missing a right-paren or missing a complete type specifier?")
+    ];
 
     #[test]
     fn oofc() {
@@ -126,23 +139,27 @@ mod test {
         use pest;
         use pest::error::{InputLocation, ErrorVariant};
         use std::mem::transmute;
-        struct Junk<'a> {
-            pub input: &'a [u8],
-            pub pos: usize,
-        }
-        println!("{:?}", line_info);
         match CParser::parse(Rule::program, &src) {
             Err(e) => {
                 let start_pos = match &e.location {
                     InputLocation::Pos(p) => *p,
                     InputLocation::Span((start, _end)) => *start,
                 };
-                let bytes = src.as_bytes();
-                let position = unsafe { transmute::<Junk, pest::Position>(Junk { input: bytes, pos: start_pos }) };
+                let position = pest::Position::new(&src[..], start_pos).unwrap();
                 let (line, col) = position.line_col();
-                println!("Calculated line and column: {}, {}", line, col);
                 let err_msg = match e.variant {
-                    ErrorVariant::ParsingError { positives, negatives } => format!("Expected one of: {:?}", positives),
+                    ErrorVariant::ParsingError { positives, negatives } => {
+                        let mut msg = None;
+                        for (rules, err_msg) in special_errors {
+                            if positives == *rules {
+                                msg = Some(err_msg);
+                            }
+                        }
+                        match msg {
+                            None => format!("Expected one of: {:?}", positives),
+                            Some(err_msg) => format!("Hint: {}\n  Expected one of: {:?}", err_msg, positives)
+                        }
+                    },
                     ErrorVariant::CustomError { message } => message
                 };
                 if let Some((filename, linestart)) = line_info.get_file_and_line_start(line) {
@@ -151,7 +168,7 @@ mod test {
   |  {}
   | {}^
   {}
-"#, filename, line - linestart - 2, col, lines[line - 2], "-".to_string().repeat(col), err_msg);
+"#, filename, line - linestart + 1, col, lines[line - 1], "-".to_string().repeat(col), err_msg);
                 }
             },
             Ok(parsed) => {
