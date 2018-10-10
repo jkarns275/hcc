@@ -136,7 +136,7 @@ type_specifier = { void_kw | int_type | struct_or_union_spec | enum_specifier | 
 
 struct_or_union = { struct_kw | union_kw }
 struct_or_union_spec = {
-      ( struct_or_union ~ (ident ~ (colon ~ struct_or_union_spec)? )? ~ lbrace ~ struct_declaration_list ~ rbrace )
+      ( struct_or_union ~ (ident ~ (colon ~ struct_or_union ~ ident)? )? ~ lbrace ~ struct_declaration_list ~ rbrace )
     | ( struct_or_union ~ ident )
 }
 
@@ -159,6 +159,10 @@ enumerator = { ident ~ ( eq ~ constant_expr )? }
 
 type_qualifier = { const_kw | volatile_kw }
 
+function_declarator = { pointer? ~ function_direct_declarator }
+function_direct_declarator = {
+    ( ident ~ ( "::" ~ ident )? | (lparen ~ declarator ~ rparen) ) ~ ( direct_declarator_array | direct_declarator_call )*
+}
 declarator = { pointer? ~ direct_declarator }
 direct_declarator_array = { lbrack ~ constant_expr? ~ rbrack }
 direct_declarator_call  = { lparen ~ ( parameter_type_list | ident_list )? ~ rparen }
@@ -225,7 +229,7 @@ jump_stmt =  {
 
 translation_unit = { external_declaration+ }
 external_declaration = { function_definition | declaration }
-function_definition = { declaration_specifiers? ~ declarator ~ declaration_list? ~ compound_stmt }
+function_definition = { declaration_specifiers? ~ function_declarator ~ declaration_list? ~ compound_stmt }
 t1 = { function_definition ~ EOI }
 
 declaration_list = { declaration+ }

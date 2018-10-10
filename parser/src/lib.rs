@@ -135,7 +135,7 @@ mod test {
 
     #[test]
     fn oofc() {
-        let (src, lines, line_info) = apply_pre_processor("binary_search.c", "../examples");
+        let (src, lines, line_info) = apply_pre_processor("tree_visitor.c", "../examples");
         use pest;
         use pest::error::{InputLocation, ErrorVariant};
         use std::mem::transmute;
@@ -168,7 +168,7 @@ mod test {
   |  {}
   | {}^
   {}
-"#, filename, line - linestart + 1, col, lines[line - 1], "-".to_string().repeat(col), err_msg);
+"#, filename, line - linestart, col, lines[line - 1], "-".to_string().repeat(col), err_msg);
                 }
             },
             Ok(parsed) => {

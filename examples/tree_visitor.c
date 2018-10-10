@@ -1,5 +1,3 @@
-#include "imports.c"
-
 struct Visitor;
 
 struct Tree {
@@ -28,6 +26,8 @@ struct Visitor {
 
 u0 Tree::init(i64 v_key) {
 	this->key = v_key;
+	this->l = 0;
+	this->r = 0;
 }
 
 i8 Tree::compare(i64 num1, i64 num2) {
@@ -89,7 +89,7 @@ i8 Tree::del(int v_key) {
 	            } else cont = false ;
 	        } else {
 	            if (is_root)
-		            if (current_node->r == 0 && current_node->l == 0) {}
+		            if (current_node->r == 0 | current_node->l == 0) {}
 		            else
 		                this->remove(parent_node, current_node);
 	            else
@@ -178,12 +178,12 @@ i8 Tree::print_node() {
 }
 
 u0 Tree::rec_print(Tree *node) {
-    printf("Howdy this: %d\n", this);
-    if (node == 0 || this == 0) return;
-	if (node->l != 0)
+    if (node == 0 | this == 0) return;
+	if (node->l != 0) {
     	this->rec_print(node->l);
+    }
 
-	print(node->key);
+    print(node->key);
 
 	if (node->r != 0)
     	this->rec_print(node->r);
@@ -207,7 +207,7 @@ i64 Visitor::visit(Tree* n) {
 	    return 0;
     }
 
-struct MyVisitor : Visitor {
+struct MyVisitor : struct Visitor {
 
     i64 visit(Tree* n) {
 		if (n->r != 0){
