@@ -8,10 +8,10 @@ struct BS {
         this->numbers = malloc(sizeof i64 * size);
         j = 1;
         k = size + 1;
-        while j < size {
+        while (j < size) {
             aux01 = 2 * j;
             aux02 = k - 3;
-            numbers[j] = aux01 + aux02;
+            this->numbers[j] = aux01 + aux02;
             j = j + k;
             k = k - 1;
         }
@@ -32,10 +32,10 @@ struct BS {
     i64 search(i64 f) {
         i64 index = 0;
         i64 size = this->size;
-        while index < size {
-            if this->numbers[index] > f {
+        while (index < size) {
+            if (this->numbers[index] > f) {
                 index = 2 * index + 2;
-            } else if this->numbers[index] < f {
+            } else if (this->numbers[index] < f) {
                 index = 2 * index + 1;
             } else {
                 return 1;

@@ -135,7 +135,7 @@ mod test {
 
     #[test]
     fn oofc() {
-        let (src, lines, line_info) = apply_pre_processor("binary_tree.c", "../examples");
+        let (src, lines, line_info) = apply_pre_processor("binary_search.c", "../examples");
         use pest;
         use pest::error::{InputLocation, ErrorVariant};
         use std::mem::transmute;
