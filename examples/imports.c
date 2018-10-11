@@ -7,4 +7,4 @@ typedef int8_t i8;
 typedef uint8_t u8;
 typedef void u0;
 
-#define print(x) printf("%d", x)
+#define print(x) printf("%d\n", x)

@@ -210,7 +210,7 @@ i64 Visitor::visit(Tree* n) {
 struct MyVisitor : struct Visitor {
 
     i64 visit(Tree* n) {
-		if (n->r != 0){
+		if (n->r != 0) {
 	    	this->r = n->r;
 	    	this->r->accept(this);
 		}
@@ -220,7 +220,7 @@ struct MyVisitor : struct Visitor {
 	    	this->l = n->l;
 	    	this->l->accept(this);
 		}
-		return 0;
+		return 2 ;
     }
 
 };
