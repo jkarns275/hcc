@@ -28,24 +28,20 @@ mod test {
             = apply_pre_processor(filename, "../examples");
         let result = parser(&src[..], &lines, &line_info);
         match &result {
-            Ok(_) => { println!("Successfully parsed \"{}\"", filename); },
+            Ok(pairs) => { println!("Successfully parsed:\n {:#?}", pairs); },
             Err(e) => { println!("{}", e); }
         };
         result.unwrap();
     }
 
-    #[test]
-    fn tree_visitor() { test_file("tree_visitor.c"); }
+    // #[test] fn tree_visitor() { test_file("tree_visitor.c"); }
 
-    #[test]
-    fn binary_tree() { test_file("binary_tree.c"); }
+    // #[test] fn binary_tree() { test_file("binary_tree.c"); }
 
-    #[test]
-    fn heap() { test_file("binary_search.c"); }
+    // #[test] fn heap() { test_file("binary_search.c"); }
 
-    #[test]
-    fn quicksort() { test_file("quicksort.c"); }
+    // #[test] fn quicksort() { test_file("quicksort.c"); }
 
      #[test]
-    fn rng() { test_file("rng.c"); }
+    fn rng() { test_file("test.c"); }
 }

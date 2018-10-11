@@ -8,6 +8,13 @@ pub struct IdStore<'a> {
 }
 
 impl<'a> IdStore<'a> {
+    pub fn new<'r>() -> IdStore<'r> {
+        IdStore {
+            ids: vec![],
+            map: HashMap::new(),
+        }
+    }
+
     pub fn get_id(&mut self, s: &'a str) -> Id {
         if self.map.contains_key(s) {
             self.map[s]
