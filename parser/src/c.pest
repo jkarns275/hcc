@@ -179,7 +179,7 @@ function_direct_declarator = {
 }
 declarator = { pointer? ~ direct_declarator }
 direct_declarator_array = { lbrack ~ constant_expr? ~ rbrack }
-direct_declarator_call  = { lparen ~ ( parameter_type_list | ident_list )? ~ rparen }
+direct_declarator_call  = { lparen ~ ( parameter_list | ident_list )? ~ rparen }
 direct_declarator       = { ident
     //( ident | (lparen ~ declarator ~ rparen) ) ~ ( direct_declarator_array | direct_declarator_call )*
 }
@@ -190,8 +190,8 @@ pointer = {
     //| ( mul ~ type_qualifier_list ~ pointer )
     }
 
-//type_qualifier_list = { type_qualifier* }
-parameter_type_list = { parameter_list  } // ~ ( comma ~ "..." )? }
+// type_qualifier_list = { type_qualifier* }
+// parameter_type_list = { parameter_list  } // ~ ( comma ~ "..." )? }
 parameter_list = { parameter_declaration ~ ( comma ~ parameter_declaration )* }
 parameter_declaration = { declaration_specifiers ~ ( declarator | abstract_declarator )? }
 
@@ -201,10 +201,10 @@ type_name = { spec_qualifier_list ~ abstract_declarator? }
 abstract_declarator = { ( pointer ~ direct_abstract_declarator? ) | direct_abstract_declarator }
 
 direct_abstract_brack = { lbrack ~ constant_expr? ~ rbrack }
-direct_abstract_paren = { lparen ~ parameter_type_list? ~ rparen }
+direct_abstract_paren = { lparen ~ parameter_list? ~ rparen }
 direct_abstract_tail = { direct_abstract_brack | direct_abstract_paren }
 direct_abstract_declarator = {
-      ( lparen ~ ( abstract_declarator | parameter_type_list )? ~ rparen ~ direct_abstract_tail* )
+      ( lparen ~ ( abstract_declarator | parameter_list )? ~ rparen ~ direct_abstract_tail* )
     | ( lbrack ~ constant_expr? ~ rbrack ~ direct_abstract_tail* )
 }
 
@@ -215,23 +215,29 @@ initializer = {
 
 initializer_list = { initializer ~ ( comma ~ initializer )* }
 
-stmt = { labeled_stmt | compound_stmt | expr_stmt | selection_stmt | iteration_stmt | jump_stmt }
-labeled_stmt = {
-      ( ident ~ colon ~ stmt )
-    | ( case_kw ~ constant_expr ~ colon ~ stmt )
-    | ( default_kw ~ colon ~ stmt )
+stmt = {
+//labeled_stmt |
+    compound_stmt | expr_stmt | selection_stmt | iteration_stmt | jump_stmt
 }
+//labeled_stmt = {
+//      ( ident ~ colon ~ stmt )
+//    | ( case_kw ~ constant_expr ~ colon ~ stmt )
+//    | ( default_kw ~ colon ~ stmt )
+//}
 compound_stmt = { lbrace ~ ( stmt | declaration )* ~ rbrace }
 stmt_list = { stmt+ }
 expr_stmt = { expr? ~ semicolon }
 selection_stmt = {
       ( if_kw ~ expr ~ stmt ~ ( else_kw ~ stmt )? )
-    | ( switch_kw ~ expr ~ stmt )
+    // | ( switch_kw ~ expr ~ stmt )
 }
 
+for_first_stmt = { declaration | semicolon }
+for_second_stmt = { expr_stmt? }
+for_third_stmt = { expr? }
 iteration_stmt = {
       ( while_kw ~ expr ~ stmt )
-    | ( for_kw ~ lparen ~ ( declaration | semicolon ) ~ expr_stmt ~ expr? ~ rparen ~ stmt )
+    | ( for_kw ~ lparen ~ for_first_stmt ~ for_second_stmt ~ for_third_stmt? ~ rparen ~ stmt )
 }
 
 jump_stmt =  {

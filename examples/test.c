@@ -2,7 +2,7 @@ struct XorWowState : struct Hello {
     struct test** state2, state3;
 
     u0 test();
-    u0 test2(u8 c, u8 d) {
+    u0 test2(u8 *c, u8 d) {
         u8 a = d;
         u8 b = c;
         if (a < b) {
@@ -24,4 +24,5 @@ struct XorWowState : struct Hello {
 int main() {
     for (;;) {
     }
+    u8 c = 5, *b = &c;
 }

@@ -38,6 +38,7 @@ pub mod structure;
 pub mod id;
 pub mod function;
 pub mod statement;
+pub mod declaration;
 
 use self::ty::Ty;
 use std::rc::Rc;

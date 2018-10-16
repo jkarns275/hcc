@@ -1,5 +1,9 @@
 use ast::ty::Ty;
 use ast::id::Id;
+use ast::AstError;
+use pest::iterators::Pair;
+use parser::Rule;
+use ast::context::Context;
 
 pub struct FnCallExpr {
     name: Id,
@@ -72,5 +76,20 @@ pub enum Expr {
     AndExpr(Box<AndExpr>),
     XorExpr(Box<XorExpr>),
     OrExpr(Box<OrExpr>),
-    AssignExpr(Box<AssignExpr>)
+    AssignExpr(Box<AssignExpr>),
+    Name(Id),
+    Integer(i64),
+    Noop,
+}
+
+impl Expr {
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+        -> Result<Expr, AstError> {
+        panic!()
+    }
+
+    pub fn from_expr_stmt_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+        -> Result<Expr, AstError> {
+        panic!()
+    }
 }

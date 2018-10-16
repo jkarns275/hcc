@@ -69,7 +69,7 @@ impl Structure {
         let mut fields = vec![];
 
         for d in declarators.into_iter() {
-            fields.push((d.id, StructField::new(ty.clone().ptr_n_to(d.ptrs), d.span)));
+            fields.push((d.name, StructField::new(ty.clone().ptr_n_to(d.ptrs), d.span)));
         }
 
         Ok(fields)
