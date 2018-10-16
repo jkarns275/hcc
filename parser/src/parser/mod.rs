@@ -95,7 +95,7 @@ const ERROR_HINTS: &'static [(&'static [Rule], &'static str)] = &[
     "Are you missing a semicolon or an arithmetic operator?"),
     (&[sizeof_expr, mul_expr],
     "Are you missing an arithmetic operator?"),
-    (&[declaration_specifiers, storage_class_specifier, type_specifier, type_qualifier],
+    (&[declaration_specifiers, storage_class_specifier, type_specifier],
     "Are you missing a type specifier?"),
     (&[gt, lt, gte, lte, equals, neq, lsh, rsh, assign_operator],
     "Are you missing a right-paren?"),

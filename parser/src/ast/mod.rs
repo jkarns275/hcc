@@ -3,6 +3,35 @@ use pest::iterators::{Pair, Pairs};
 use parser;
 use std::collections::HashMap;
 
+macro_rules! ident {
+    ( $pairs_name:ident, $ident_bank:expr, $span:expr ) => {
+        if let Some(r) = $pairs_name .next() {
+            if r.as_rule() != Rule::ident {
+                return Err(AstError::new("Expected ident.", r.as_span()));
+            }
+            let ident = r.into_span().as_str();
+            $ident_bank .get_id(ident)
+        } else {
+            return Err(AstError::new("Expected ident.", $span));
+        }
+    }
+}
+
+macro_rules! expect {
+    ( $pairs_name:ident, $rule:expr, $rule_str:expr, $span:expr ) => {
+        if let Some(r) = $pairs_name .next() {
+            if r.as_rule() != $rule {
+                return Err(AstError::new(concat!("Expected rule \"", $rule_str, ".\""), r.as_span()));
+            }
+            r
+        } else {
+            return Err(AstError::new("Unexpected end of tokens.", $span));
+        }
+    }
+}
+
+pub mod context;
+pub mod declarator;
 pub mod expr;
 pub mod ty;
 pub mod structure;
@@ -16,37 +45,58 @@ use self::id::{Id, IdStore};
 use self::expr::Expr;
 use self::function::Function;
 use super::parser::Rule;
+use pest::Span;
 
-pub struct Declaration {
-    pub ty: Ty, pub name: Id, pub initializer: Option<Expr>,
+pub struct PosSpan {
+    start: usize,
+    end: usize
 }
-impl Declaration {
-    pub fn from_pair<'a>(pair: Pair<'a, Rule>, idstore: &mut IdStore)
-        -> Result<(Ty, Vec<Self>), String> {
-        debug_assert!(pair.as_rule() == Rule::declaration);
-        panic!()
+
+impl PosSpan {
+    pub fn from_span(span: Span) -> Self {
+        PosSpan { start: span.start(), end: span.end() }
     }
 }
 
-pub struct AST<'a> {
+pub struct AstError {
+    pub err_msg: String,
+    pub start: usize
+}
+
+impl AstError {
+    pub fn new<S: Into<String>>(err_msg: S, span: Span)-> Self {
+        let start = span.start();
+        let err_msg = err_msg.into();
+        AstError { start, err_msg }
+    }
+
+    pub fn eof<S: Into<String>>(s: Option<S>) -> Self {
+        if let Some(s) = s {
+            AstError { start: 0, err_msg: s.into() }
+        } else {
+            AstError { start: 0, err_msg: "Unexpected end of input.".into() }
+        }
+    }
+}
+
+
+pub struct Ast<'a> {
     idstore: IdStore<'a>,
-    declarations: Vec<Declaration>,
     structs: HashMap<Id, Rc<Structure>>,
     functions: HashMap<Id, Function>,
 }
 
-impl<'a> AST<'a> {
-    fn new<'r>() -> AST<'r> {
-        AST {
+impl<'a> Ast<'a> {
+    fn new<'r>() -> Ast<'r> {
+        Ast {
             idstore: IdStore::new(),
-            declarations: vec![],
             functions: HashMap::new(),
             structs: HashMap::new(),
         }
     }
 
-    pub fn from_pairs(mut pairs: Pairs<'a, Rule>) -> AST<'a> {
-        let mut ast = AST::new();
+    pub fn from_pairs(mut pairs: Pairs<'a, Rule>) -> Ast<'a> {
+        let mut ast = Ast::new();
 
         let program = pairs.next().unwrap();
 
