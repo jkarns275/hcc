@@ -49,16 +49,12 @@ impl Structure {
         let ty =
             if let Some(ty) = pairs.next() {
                 let span = ty.as_span();
-                if ty.as_rule() == Rule::spec_qualifier_list {
-                    let mut pairs = ty.into_inner();
-                    let ty = expect!(pairs, Rule::type_specifier, "type specifier", span);
-                    if let Some(type_specifier) = ty.into_inner().next() {
-                        Ty::from_pair(type_specifier, context)?
-                    } else {
-                        return Err(AstError::new("Expected type specifier", span))
-                    }
+                let mut pairs = ty.into_inner();
+                let ty = expect!(pairs, Rule::type_specifier, "type specifier", span);
+                if let Some(type_specifier) = ty.into_inner().next() {
+                    Ty::from_pair(type_specifier, context)?
                 } else {
-                    return Err(AstError::new("Expected spec_qualifier_list", span))
+                    return Err(AstError::new("Expected type specifier", span))
                 }
             } else {
                 return Err(AstError::new("Unexpected end of tokens.", span))

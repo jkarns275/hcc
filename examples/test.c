@@ -4,6 +4,7 @@ struct XorWowState : struct Hello {
     u0 test();
     u0 test2(u8 *c, u8 d) {
         u8 a = d;
+        a *= a += a;
         u8 b = c;
         if (a < b) {
             print(1);

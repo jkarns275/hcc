@@ -48,6 +48,7 @@ use self::function::Function;
 use super::parser::Rule;
 use pest::Span;
 
+#[derive(Clone, Copy)]
 pub struct PosSpan {
     start: usize,
     end: usize
@@ -108,7 +109,7 @@ impl<'a> Ast<'a> {
         let mut program = program.into_inner();
 
         while let Some(pair) = program.next() {
-
+            // TODO: This.
         }
 
         ast

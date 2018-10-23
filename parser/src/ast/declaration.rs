@@ -29,9 +29,9 @@ impl Declaration {
                 return Err(AstError::new("Expected declarator", pair.as_span()))
             }
             let declarator = Declarator::from_pair(pair, context)?;
-            declarator.push(Declaration {
+            declarations.push(Declaration {
                 name: declarator.name,
-                ty: ty.ptr_n_to(declarator.ptrs),
+                ty: ty.clone().ptr_n_to(declarator.ptrs),
                 initializer: declarator.initializer,
             });
         }

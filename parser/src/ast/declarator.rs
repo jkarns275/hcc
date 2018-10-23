@@ -53,7 +53,7 @@ impl Declarator {
             let mut pairs = direct_declarator.into_inner();
             let name = ident!(pairs, context.idstore, span);
             if let Some(pair) = pairs.next() {
-                let initializer = Expr::from_pair(pair, context)?;
+                let initializer = Some(Expr::from_pair(pair, context)?);
                 Ok(Declarator {
                     name,
                     ptrs,

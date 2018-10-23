@@ -7,29 +7,63 @@ use parser::Rule;
 use ast::context::Context;
 
 #[derive(PartialEq, Eq, Clone)]
-pub enum Ty {
+pub enum TyKind {
     I0,
     I8,
     I64,
-    Ptr(Box<Ty>),
     Struct(Id),
 }
 
+#[derive(Clone)]
+pub struct Ty {
+    kind: TyKind,
+    ptr: usize,
+}
+
 impl Ty {
-    pub fn ptr_to(self) -> Ty { Ty::Ptr(box self) }
-    pub fn ptr_n_to(self, n: usize) -> Ty {
-        if n == 0 {
-            self
-        } else {
-            let mut ret = self;
-            for i in 0..n {
-                ret = ret.ptr_to();
-            }
-            ret
+
+    pub fn new(kind: TyKind) -> Self {
+        Ty { kind, ptr: 0 }
+    }
+
+    pub fn ptr_to(mut self) -> Ty {
+        self.ptr += 1;
+        self
+    }
+    pub fn ptr_n_to(mut self, n: usize) -> Ty {
+        self.ptr += n;
+        self
+    }
+
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+        -> Result<Ty, AstError> {
+        let span = pair.as_span();
+        match pair.as_rule() {
+            Rule::type_name => Self::type_name_from_pair(pair, context),
+            Rule::type_specifier => Self::type_specifier_from_pair(pair, context),
+            _ => panic!("Expeceted type_name or type_specifier"),
         }
     }
-    /// Since types usually aren't contained within their own pair
-    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>) -> Result<Ty, AstError> {
+
+    fn type_name_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+        -> Result<Ty, AstError> {
+        debug_assert!(pair.as_rule() == Rule::type_name);
+        let span = pair.as_span();
+        let mut pairs = pair.into_inner();
+        let ty_pair = expect!(pairs, Rule::type_specifier, "type specifier", span);
+        let ty = Self::type_specifier_from_pair(ty_pair, context)?;
+        if let Some(next) = pairs.next() {
+            if next.as_rule() != Rule::pointer {
+                Err(AstError::new("Expected pointer.", next.as_span()))
+            } else {
+                Ok(ty.ptr_n_to(next.as_str().matches('*').count()))
+            }
+        } else {
+            Ok(ty)
+        }
+    }
+
+    fn type_specifier_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>) -> Result<Ty, AstError> {
         debug_assert!(pair.as_rule() == Rule::type_specifier);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
@@ -41,15 +75,15 @@ impl Ty {
                     let mut pairs = r.into_inner();
                     let _ = expect!(pairs, Rule::struct_kw, "struct keyword", span);
                     let struct_name = ident!(pairs, context.idstore, span);
-                    Ok(Ty::Struct(struct_name))
+                    Ok(Ty::new(TyKind::Struct(struct_name)))
                 },
                 Rule::void_kw => {
-                    Ok(Ty::I0)
+                    Ok(Ty::new(TyKind::I0))
                 },
                 Rule::int_type => {
                     match r.as_str() {
-                        "i64"   => Ok(Ty::I64),
-                        "i8"    => Ok(Ty::I8),
+                        "i64"   => Ok(Ty::new(TyKind::I64)),
+                        "i8"    => Ok(Ty::new(TyKind::I8)),
                         _     => panic!("Unsupported integer type"),
                     }
                 },
