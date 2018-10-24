@@ -17,6 +17,7 @@ pub mod parser;
 mod test {
     use pest::Parser;
     use parser::*;
+    use ast::Ast;
 
     const _parser_text: &'static str = include_str!("c.pest");
 
@@ -29,11 +30,12 @@ mod test {
         let (src, lines, line_info)
             = apply_pre_processor(filename, "../examples");
         let result = parser(&src[..], &lines, &line_info);
-        match &result {
-            Ok(pairs) => { println!("Successfully parsed:\n {:#?}", pairs); },
-            Err(e) => { println!("{}", e); }
-        };
-        result.unwrap();
+//        match &result {
+//            Ok(pairs) => { println!("Successfully parsed:\n {:#?}", pairs); },
+//            Err(e) => { println!("{}", e); }
+//        };
+        let a = result.unwrap();
+        let ast = Ast::from_pairs(a);
     }
 
     // #[test] fn tree_visitor() { test_file("tree_visitor.c"); }

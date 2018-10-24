@@ -45,11 +45,9 @@ impl Structure {
         -> Result<Vec<(Id, StructField)>, AstError> {
         debug_assert!(pair.as_rule() == Rule::field_declaration);
         let span = pair.as_span();
-        let mut pairs = pair.into_inner();
+        let mut pairs = pair.into_inner().peekable();
         let ty =
-            if let Some(ty) = pairs.next() {
-                let span = ty.as_span();
-                let mut pairs = ty.into_inner();
+            if pairs.peek().is_some() {
                 let ty = expect!(pairs, Rule::type_specifier, "type specifier", span);
                 if let Some(type_specifier) = ty.into_inner().next() {
                     Ty::from_pair(type_specifier, context)?

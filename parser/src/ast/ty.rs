@@ -41,7 +41,7 @@ impl Ty {
         match pair.as_rule() {
             Rule::type_name => Self::type_name_from_pair(pair, context),
             Rule::type_specifier => Self::type_specifier_from_pair(pair, context),
-            _ => panic!("Expeceted type_name or type_specifier"),
+            _ => { Err(AstError::new(format!("{:?}", pair.as_rule()), pair.as_span())) },
         }
     }
 
@@ -50,7 +50,7 @@ impl Ty {
         debug_assert!(pair.as_rule() == Rule::type_name);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
-        let ty_pair = expect!(pairs, Rule::type_specifier, "type specifier", span);
+        let ty_pair = expect!(pairs, Rule::type_specifier, "type specifier!!", span);
         let ty = Self::type_specifier_from_pair(ty_pair, context)?;
         if let Some(next) = pairs.next() {
             if next.as_rule() != Rule::pointer {

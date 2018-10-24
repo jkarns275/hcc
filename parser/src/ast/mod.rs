@@ -2,6 +2,7 @@ use ast::structure::Structure;
 use pest::iterators::{Pair, Pairs};
 use parser;
 use std::collections::HashMap;
+use ast::context::*;
 
 macro_rules! ident {
     ( $pairs_name:ident, $ident_bank:expr, $span:expr ) => {
@@ -21,7 +22,7 @@ macro_rules! expect {
     ( $pairs_name:ident, $rule:expr, $rule_str:expr, $span:expr ) => {
         if let Some(r) = $pairs_name .next() {
             if r.as_rule() != $rule {
-                return Err(AstError::new(concat!("Expected rule \"", $rule_str, ".\""), r.as_span()));
+                return Err(AstError::new(format!(concat!("Expected rule \"", $rule_str, ".\" Instead got {:?}"), r.as_rule()), r.as_span()));
             }
             r
         } else {
@@ -60,6 +61,7 @@ impl PosSpan {
     }
 }
 
+#[derive(Debug)]
 pub struct AstError {
     pub err_msg: String,
     pub start: usize
@@ -101,6 +103,7 @@ impl<'a> Ast<'a> {
         let mut ast = Ast::new();
 
         let program = pairs.next().unwrap();
+        let mut context = Context::new();
 
         if program.as_rule() != Rule::program {
             panic!("From pairs requires a program pair as root");
@@ -109,7 +112,27 @@ impl<'a> Ast<'a> {
         let mut program = program.into_inner();
 
         while let Some(pair) = program.next() {
-            // TODO: This.
+            match pair.as_rule() {
+                Rule::struct_or_union_spec => {
+                    let s = match Structure::from_pair(pair, &mut context) {
+                        Ok(s) => s,
+                        Err(e) => { println!("{:?}", e); context.errors.push(e); continue }
+                    };
+                    context.structs.insert(s.name, Rc::new(s));
+                },
+                Rule::function_definition => {
+                    let f = match Function::from_pair(pair, &mut context) {
+                        Ok(s) => s,
+                        Err(e) => { println!("{:?}", e); context.errors.push(e); continue }
+                    };
+                    let fnlist = context.functions.entry(f.name).or_insert_with(|| vec![]);
+                    fnlist.push(Rc::new(f));
+                    // TODO: Could do a type / overload check before adding?
+                },
+                _ => {
+                    println!("Encountered unexpected rule {:?}", pair.as_rule());
+                }
+            }
         }
 
         ast
