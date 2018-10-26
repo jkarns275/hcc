@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use ast::id::Id;
 use ast::function::Function;
-use ast::ty::Ty;
+use ast::ty::*;
 use pest::iterators::Pair;
 use parser::Rule;
 use ast::id::IdStore;
@@ -15,6 +15,7 @@ use ast::context::Context;
 use pest::Span;
 use pest::Position;
 use ast::PosSpan;
+use ast::declaration::Declaration;
 
 pub enum StructDeclaration {
     Single(Vec<Declarator>),
@@ -48,12 +49,7 @@ impl Structure {
         let mut pairs = pair.into_inner().peekable();
         let ty =
             if pairs.peek().is_some() {
-                let ty = expect!(pairs, Rule::type_specifier, "type specifier", span);
-                if let Some(type_specifier) = ty.into_inner().next() {
-                    Ty::from_pair(type_specifier, context)?
-                } else {
-                    return Err(AstError::new("Expected type specifier", span))
-                }
+                Ty::from_pair(expect!(pairs, Rule::type_specifier, "type specifier", span), context)?
             } else {
                 return Err(AstError::new("Unexpected end of tokens.", span))
             };
@@ -102,17 +98,43 @@ impl Structure {
         let _ = expect!(pairs, Rule::struct_kw, "struct keyword", span);
         let name = ident!(pairs, context.idstore, span);
 
-        let next = pairs.next();
-        if let Some(r) = next {
-            if r.as_rule() == Rule::struct_kw {
-                let name = ident!(pairs, context.idstore, span);
+        Ok(if let Some(r) = pairs.next() {
+            let name = ident!(pairs, context.idstore, span);
+            let mut next = pairs.next();
+            let parent = if let Some(next_ref) = next.as_ref() {
+                match next_ref.as_rule() {
+                    Rule::struct_or_union => {
+                        let parent_name = ident!(pairs, context.idstore, span);
+                        Some(parent_name)
+                    },
+                    _ => None,
+                }
+            } else { panic!("This shouldnt happen. ") };
+            if parent.is_some() {
+                next = pairs.next();
             }
-            let declarations = expect!(pairs, Rule::struct_declaration_list, "struct declaration list", span);
-            let (methods, fields)
+            let declarations = next.expect("Unexpected end of tokens while parsing struct.");
+            let (fields, mut methods)
                 = Structure::fields_and_methods_from_pairs(declarations, context)?;
-        }
-
-        Err(AstError::new("", span))
+            for (_name, method_list) in methods.iter_mut() {
+                for method in method_list.iter_mut() {
+                    method.arg_order.insert(0, context.idstore.get_id("this"));
+                    method.args.insert(context.idstore.get_id("this"), Declaration {
+                        name: context.idstore.get_id("this"),
+                        ty: Ty { kind: TyKind::Struct(name), ptr: 1 },
+                        initializer: None,
+                    });
+                }
+            }
+            Structure { methods, fields, parent, name }
+        } else {
+            Structure {
+                methods: HashMap::new(),
+                fields: HashMap::new(),
+                parent: None,
+                name,
+            }
+        })
     }
 }
 

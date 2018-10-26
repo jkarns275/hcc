@@ -20,7 +20,7 @@ macro_rules! arithmetic_expr {
         impl $name {
             pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
                 -> Result<Expr, AstError> {
-                debug_assert!(pair.as_rule() == Rule::$rule);
+               debug_assert!(pair.as_rule() == Rule::$rule);
                 let span = pair.as_span();
                 let mut pairs = pair.into_inner().peekable();
                 if let Some(pair) = pairs.next() {
@@ -43,7 +43,7 @@ macro_rules! arithmetic_expr {
                         Ok(Expr { span: PosSpan::from_span(span), expr: ExprKind::$name(box expr) })
                     }
                 } else {
-                    Err(AstError::new("Unexpected end of tokens.", span))
+                    Err(AstError::new(concat!("Unexpected end of tokens in ", stringify!($name)), span))
                 }
             }
         }
@@ -55,10 +55,10 @@ macro_rules! arithmetic_expr {
     }
 }
 
-arithmetic_expr!( AddExpr, AddOp, add_expr, SizeofExpr, sizeof_expr );
-arithmetic_expr!( MulExpr, MulOp, mul_expr, AddExpr, add_expr );
+arithmetic_expr!( MulExpr, MulOp, mul_expr, SizeofExpr, sizeof_expr );
+arithmetic_expr!( AddExpr, AddOp, add_expr, MulExpr, mul_expr );
 //arithmetic_expr!( ShiftExpr, ShiftOp );
-arithmetic_expr!( CmpExpr, CmpOp, cmp_expr, MulExpr, mul_expr );
+arithmetic_expr!( CmpExpr, CmpOp, cmp_expr, AddExpr, add_expr );
 arithmetic_expr!( EqExpr, EqOp, eq_expr, CmpExpr, cmp_expr );
 arithmetic_expr!( AssignExpr, AssignOp, assign_expr, EqExpr, eq_expr );
 //arithmetic_expr!( AndExpr );
@@ -176,7 +176,7 @@ impl IntLit {
                 )),
             })
         } else {
-            Err(AstError::new("Unexpected end of tokens.", span))
+            Err(AstError::new("Unexpected end of tokens in IntLit", span))
         }
     }
 }
@@ -204,7 +204,7 @@ impl PrimaryExpr {
                 _               => unreachable!("Something is wrong with primary_expr rule")
             })
         } else {
-            Err(AstError::new("Unexpected end of tokens.", span))
+            Err(AstError::new("Unexpected end of tokens in PrimaryExpr", span))
         }
     }
 }
@@ -234,6 +234,7 @@ impl PostfixExpr {
                      };
                  },
                  Rule::postfix_call     => {
+                     let mut pairs = next.into_inner();
                      let mut expr_list: Pairs<'r, Rule> =
                          expect!(pairs, Rule::argument_expr_list,
                                  "argument expr list", span)
@@ -352,7 +353,7 @@ impl UnaryExpr {
                 _ => unreachable!("Invalid unary expr")
             })
         } else {
-            Err(AstError::new("Unexpected end of tokens.", span))
+            Err(AstError::new("Unexpected end of tokens in UnaryExpr", span))
         }
     }
 }
@@ -380,7 +381,7 @@ impl CastExpr {
                 _ => unreachable!("Something is wrong with the grammar!")
             }
         } else {
-            Err(AstError::new("Unexpected end of tokens.", span))
+            Err(AstError::new("Unexpected end of tokens in CastExpr", span))
         }
     }
 }
@@ -411,7 +412,7 @@ impl SizeofExpr {
                 _ => unreachable!("Something is wrong with the parser!")
             }
         } else {
-            Err(AstError::new("Unexpected end of tokens.", span))
+            Err(AstError::new("Unexpected end of tokens in SizeofExpr", span))
         }
     }
 }

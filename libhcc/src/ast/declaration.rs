@@ -5,7 +5,7 @@ use ast::context::Context;
 use ast::AstError;
 use parser::Rule;
 use ast::declarator::Declarator;
-use ast::expr::Expr;
+use ast::expr::*;
 
 pub struct Declaration {
     pub name: Id,
@@ -23,22 +23,31 @@ impl Declaration {
             expect!(pairs, Rule::declaration_specifiers, "declaration specifiers", span),
             context
         )?;
+        let init_declarator_list =
+            expect!(pairs, Rule::init_declarator_list, "init declarator list", span);
+        let mut pairs = init_declarator_list.into_inner();
         let mut declarations = vec![];
         while let Some(pair) = pairs.next() {
-            if pair.as_rule() != Rule::declarator {
-                return Err(AstError::new("Expected declarator", pair.as_span()))
+            if pair.as_rule() != Rule::init_declarator {
+                println!("pair as rule: {:?}", pair.as_rule());
+                return Err(AstError::new("Expected init_declarator", pair.as_span()))
             }
-            let declarator = Declarator::from_pair(pair, context)?;
+            let mut pairs = pair.into_inner();
+            let declarator = Declarator::from_pair(
+                expect!(pairs, Rule::declarator, "declarator", span),
+                context)?;
+            let initializer =
+                if let Some(initializer) = pairs.next() {
+                    Some(AssignExpr::from_pair(initializer, context)?)
+                } else {
+                    None
+                };
             declarations.push(Declaration {
                 name: declarator.name,
                 ty: ty.clone().ptr_n_to(declarator.ptrs),
-                initializer: declarator.initializer,
+                initializer,
             });
         }
-        let declarator = Declarator::from_pair(
-            expect!(pairs, Rule::declarator, "declarator", span),
-            context
-        )?;
 
         Ok(declarations)
     }

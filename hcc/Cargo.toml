@@ -7,3 +7,8 @@ authors = ["Josh Karns <jkarns275@gmail.com>"]
 pest = { git = "https://github.com/jkarns275/pest", branch = "master", version = "2.0.1"}
 nom = "4.0.0"
 pest_derive = "2.0.1"
+argparse = "0.2.2"
+
+[[bin]]
+name="hcc"
+path="src/cli.rs"

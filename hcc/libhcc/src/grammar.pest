@@ -1,0 +1,114 @@
+whitespace = _{ " " | "\n" | "\r" | "\t" }
+
+lparen = _{ "(" }
+rparen = _{ ")" }
+lbrace = _{ "{" }
+rbrace = _{ "}" }
+lbrack = _{ "[" }
+rbrack = _{ "]" }
+colon = _{ ":" }
+semicolon = _{ ";" }
+comma = _{ "," }
+dot = _{ "." }
+and = _{ "&" }
+or = _{ "|" }
+xor = _{ "^" }
+add = _{ "+" }
+sub = _{ "-" }
+mul = _{ "*" }
+div = _{ "/" }
+modulus = _{ "%" }
+not = { "!" }
+eq = _{ "=" }
+returns = _{ "->" }
+gt = { ">" }
+lt = { "<" }
+gte = { ">=" }
+lte = { "<=" }
+equals = { "==" }
+neq = { "!=" }
+
+fn_kw = _{ "fn" }
+struct_kw = _{ "struct" }
+impl_kw = _{ "impl" }
+let_kw = _{ "let" }
+return_kw = _{ "return" }
+if_kw = _{ "if" }
+while_kw = _{ "while" }
+else_kw = _{ "else" }
+
+sizeof_kw = { "sizeof" }
+break_kw = { "break" }
+true_kw = { "true" }
+false_kw = { "false" }
+
+bin_digit = { !(whitespace) ~ ("0" | "1") }
+dec_digit = { !(whitespace) ~ ('0'..'9') }
+hex_digit = { !(whitespace) ~ ('0'..'9' | 'a'..'f' | 'A'..'F') }
+
+bin_lit = { ( "0b" | "0B" ) ~ bin_digit+ }
+hex_lit = { ( "0x" | "0X" ) ~ hex_digit+ }
+dec_lit = { dec_digit+ }
+
+int_literal = { ( "+" | "-" )? ~ (hex_lit | bin_lit | dec_lit) }
+
+bool_literal = { "true" | "false" }
+
+ident = { ( 'a'..'z' | 'A'..'Z' | "_" | '\u{203C}'..'\u{3299}' | '\u{1F000}'..'\u{1F644}' )
+~ ( 'a'..'z' | 'A'..'Z' | "_" | '0'..'9' | '\u{203C}'..'\u{3299}' | '\u{1F000}'..'\u{1F644}' )* }
+
+int_array_literal_long  = { lbrack ~ ( int_literal ~ comma )* ~ int_literal ~ comma? ~ rbrack }
+int_array_literal_short = { lbrack ~ int_literal ~ semicolon ~ int_literal ~ rbrack }
+
+ty = { "&"? ~ ident }
+
+struct_field = { ident ~ colon ~ ty }
+struct_def = { struct_kw ~ ty ~ lbrace ~ (struct_field ~ comma)* ~ struct_field ~ comma? ~ rbrace }
+struct_method_header = {
+    fn_kw ~ ident ~ lparen ~ "&self" ~ ( comma ~ (struct_field ~ comma)* ~ struct_field)? ~ rparen ~ (returns ~ ident)?
+}
+
+struct_method = { struct_method_header ~ lbrace ~ function_body ~ rbrace }
+
+var_reference = { (ident ~ dot)* ~ ident }
+
+ptr_deref = { mul ~ ( expr | ( lparen ~ expr ~ rparen ) ) }
+ref_to = { and ~ ident }
+construction = { ident ~ lbrace ~ ( ident ~ colon ~ expr ~ comma)* ~
+ident ~ colon ~ expr ~ comma? ~ rbrace }
+
+comp_op = { gte | lte | gt | lt | equals | neq }
+cmp_expr = { (construction | and_expr) ~ (comp_op ~ (construction | and_expr))+ }
+
+function_call = { var_reference ~ function_args }
+
+expr = { construction | and_expr ~ (dot ~ and_expr)* | cmp_expr }
+base_expr = { true_kw | false_kw | function_call | var_reference | ptr_deref | ref_to | int_literal | lparen ~ expr ~ rparen }
+and_expr = { or_expr    ~ ( and ~ or_expr   )* }
+or_expr  = { xor_expr   ~ ( or  ~ not_expr  )* }
+xor_expr = { not_expr   ~ ( xor ~ not_expr  )* }
+not_expr = { not* ~ sum_expr }
+sum_expr = { dif_expr   ~ ( add ~ dif_expr  )* }
+dif_expr = { mul_expr   ~ ( sub ~ mul_expr  )* }
+mul_expr = { div_expr   ~ ( mul ~ div_expr  )* }
+div_expr = { mod_expr   ~ ( div ~ mod_expr  )* }
+mod_expr = { sizeof_expr  ~ ( modulus ~ sizeof_expr )* }
+sizeof_expr = { base_expr }
+
+if_stmt = { if_kw ~ expr ~ lbrace ~ function_body ~ rbrace ~ 
+    ( else_kw ~ if_kw ~ expr ~ lbrace ~ function_body ~ rbrace )* 
+    ~ ( else_kw ~ lbrace ~ function_body ~ rbrace )? }
+while_stmt = { while_kw ~ expr ~ lbrace ~ function_body ~ rbrace }
+
+
+assignment = { expr ~ eq ~ expr }
+declaration = { let_kw ~ ident ~ colon ~ ty ~ eq ~ expr }
+return_stmt = { return_kw ~ expr }
+function_body = { ((return_stmt | break_kw | declaration | if_stmt | while_stmt | assignment) ~ semicolon)* }
+function_args = { lparen ~ ( expr ~ comma )* ~ expr? ~ rparen  }
+
+implementation = { impl_kw ~ ty ~ lbrace ~ struct_method* ~ rbrace }
+
+function = { fn_kw ~ ident ~ lparen ~ (ident ~ colon ~ ty ~ comma)* ~ (ident ~ colon ~ ty)? ~ rparen ~ (returns ~ ty)? ~ lbrace ~ function_body ~ rbrace }
+
+program = { soi ~ (function | implementation | struct_def)+ ~ eoi }

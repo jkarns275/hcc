@@ -1,0 +1,13 @@
+[package]
+name = "libhcc"
+version = "0.1.0"
+authors = ["Josh Karns <jkarns275@gmail.com>"]
+
+[dependencies]
+pest = { git = "https://github.com/jkarns275/pest", branch = "master", version = "2.0.1"}
+nom = "4.0.0"
+pest_derive = "2.0.1"
+
+[lib]
+name="libhcc"
+path="src/lib.rs"

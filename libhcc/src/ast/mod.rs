@@ -26,7 +26,7 @@ macro_rules! expect {
             }
             r
         } else {
-            return Err(AstError::new("Unexpected end of tokens.", $span));
+            return Err(AstError::new(concat!("Unexpected end of tokens in ", stringify!($rule), " ", file!(), ":", line!()), $span));
         }
     }
 }
@@ -51,8 +51,8 @@ use pest::Span;
 
 #[derive(Clone, Copy)]
 pub struct PosSpan {
-    start: usize,
-    end: usize
+    pub start: usize,
+    pub end: usize
 }
 
 impl PosSpan {
@@ -85,9 +85,9 @@ impl AstError {
 
 
 pub struct Ast<'a> {
-    idstore: IdStore<'a>,
-    structs: HashMap<Id, Rc<Structure>>,
-    functions: HashMap<Id, Function>,
+    pub idstore: IdStore<'a>,
+    pub structs: HashMap<Id, Rc<Structure>>,
+    pub functions: HashMap<Id, Function>,
 }
 
 impl<'a> Ast<'a> {
@@ -99,7 +99,7 @@ impl<'a> Ast<'a> {
         }
     }
 
-    pub fn from_pairs(mut pairs: Pairs<'a, Rule>) -> Ast<'a> {
+    pub fn from_pairs(mut pairs: Pairs<'a, Rule>) -> Result<Ast<'a>, Vec<AstError>> {
         let mut ast = Ast::new();
 
         let program = pairs.next().unwrap();
@@ -129,12 +129,16 @@ impl<'a> Ast<'a> {
                     fnlist.push(Rc::new(f));
                     // TODO: Could do a type / overload check before adding?
                 },
+                Rule::EOI => {},
                 _ => {
                     println!("Encountered unexpected rule {:?}", pair.as_rule());
                 }
             }
         }
-
-        ast
+        if context.errors.len() != 0 {
+            Err(context.errors)
+        } else {
+            Ok(ast)
+        }
     }
 }

@@ -7,10 +7,10 @@ extern crate pest;
 
 #[macro_use]
 extern crate pest_derive;
+extern crate argparse;
 
-
+pub mod cli;
 pub mod ast;
-
 pub mod parser;
 
 #[cfg(test)]
@@ -19,7 +19,7 @@ mod test {
     use parser::*;
     use ast::Ast;
 
-    const _parser_text: &'static str = include_str!("c.pest");
+    const _parser_text: &'static str = include_str!(../src/c.pest);
 
     const BINARY_SEARCH: &'static str = include_str!("../../examples/binary_search.c");
     const BINARY_TREE: &'static str = include_str!("../../examples/binary_tree.c");
@@ -30,10 +30,10 @@ mod test {
         let (src, lines, line_info)
             = apply_pre_processor(filename, "../examples");
         let result = parser(&src[..], &lines, &line_info);
-//        match &result {
-//            Ok(pairs) => { println!("Successfully parsed:\n {:#?}", pairs); },
-//            Err(e) => { println!("{}", e); }
-//        };
+        match &result {
+            Ok(pairs) => { println!("Successfully parsed:\n {:#?}", pairs); },
+            Err(e) => { println!("{}", e); }
+        };
         let a = result.unwrap();
         let ast = Ast::from_pairs(a);
     }

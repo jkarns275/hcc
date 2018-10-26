@@ -90,6 +90,8 @@ pub fn remove_line_markers(s: String) -> (String, Vec<String>, LineInfo) {
 }
 
 use self::Rule::*;
+use pest::error::*;
+
 const ERROR_HINTS: &'static [(&'static [Rule], &'static str)] = &[
     (&[gt, lt, gte, lte, equals, neq, lsh, rsh, struct_deref_op, postfix_index, postfix_call, postfix_dot, assign_operator],
     "Are you missing a semicolon or an arithmetic operator?"),
@@ -103,42 +105,36 @@ const ERROR_HINTS: &'static [(&'static [Rule], &'static str)] = &[
     "Are you missing a right-paren or missing a complete type specifier?")
 ];
 
-pub fn parser<'r>(src: &'r str, lines: &Vec<String>, line_info: &LineInfo) -> Result<Pairs<'r, Rule>, String> {
+pub fn parse<'r>(src: &'r str, lines: &Vec<String>, line_info: &LineInfo) -> Result<Pairs<'r, Rule>, (String, (usize, usize))> {
     match CParser::parse(Rule::program, &src[..]) {
         Ok(pairs) => Ok(pairs),
         Err(e) => {
-                let start_pos = match &e.location {
-                    InputLocation::Pos(p) => *p,
-                    InputLocation::Span((start, _end)) => *start,
-                };
-                let position = pest::Position::new(&src[..], start_pos).unwrap();
-                let (line, col) = position.line_col();
-                let err_msg = match e.variant {
-                    ErrorVariant::ParsingError { positives, negatives } => {
-                        let mut msg = None;
-                        for (rules, err_msg) in ERROR_HINTS {
-                            if positives == *rules {
-                                msg = Some(err_msg);
-                            }
+            let start_pos = match &e.location {
+                InputLocation::Pos(p) => *p,
+                InputLocation::Span((start, _end)) => *start,
+            };
+            let position = pest::Position::new(&src[..], start_pos).unwrap();
+            let (line, col) = position.line_col();
+
+            Err((match &e.variant {
+                ErrorVariant::ParsingError { positives, negatives } => {
+                    let mut msg = None;
+                    for (rules, err_msg) in ERROR_HINTS {
+                        if *positives == *rules {
+                            msg = Some(err_msg);
+                            break
                         }
-                        match msg {
-                            None => format!("Expected one of: {:?}", positives),
-                            Some(err_msg) => format!("Hint: {}\n  Expected one of: {:?}", err_msg, positives)
-                        }
-                    },
-                    ErrorVariant::CustomError { message } => message
-                };
-                if let Some((filename, linestart)) = line_info.get_file_and_line_start(line) {
-                    Err(format!(r#"
-   Encountered error in file "{}" {}:{}:
-  |
-  |  {}
-  | {}^
-  {}
-"#, filename, line - linestart, col, lines[line - 1], "-".to_string().repeat(col), err_msg))
-                } else {
-                    panic!("C Pre Processor gave incorrect line markers or something!")
-                }
-            },
+                    }
+                    match msg {
+                        None => format!("Expected one of: {:?}", positives),
+                        Some(err_msg) => format!("Hint: {}\n  Expected one of: {:?}", err_msg, positives)
+                    }
+                },
+                ErrorVariant::CustomError { message } => message.to_string(),
+            }, match e.line_col {
+                LineColLocation::Pos((a, b)) => (a, b),
+                LineColLocation::Span((a, b), _) => (a, b),
+            }))
+        }
     }
 }

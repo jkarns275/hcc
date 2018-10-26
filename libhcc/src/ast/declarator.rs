@@ -10,7 +10,6 @@ pub struct Declarator {
     pub name: Id,
     pub ptrs: usize,
     pub span: PosSpan,
-    pub initializer: Option<Expr>,
 }
 
 impl Declarator {
@@ -39,7 +38,7 @@ impl Declarator {
                 Rule::pointer => pair.as_str().matches('*').count(),
                 _ => 0
             };
-            let pair =
+            let direct_declarator =
                 if ptrs != 0 {
                     match pairs.next() {
                         Some(t) => t,
@@ -48,26 +47,14 @@ impl Declarator {
                 } else {
                     pair
                 };
-
-            let direct_declarator = expect!(pairs, Rule::direct_declarator, "direct declarator", span);
             let mut pairs = direct_declarator.into_inner();
             let name = ident!(pairs, context.idstore, span);
-            if let Some(pair) = pairs.next() {
-                let initializer = Some(Expr::from_pair(pair, context)?);
-                Ok(Declarator {
-                    name,
-                    ptrs,
-                    span: PosSpan::from_span(span),
-                    initializer,
-                })
-            } else {
-                Ok(Declarator {
-                    name,
-                    ptrs,
-                    span: PosSpan::from_span(span),
-                    initializer: None,
-                })
-            }
+
+            Ok(Declarator {
+                name,
+                ptrs,
+                span: PosSpan::from_span(span),
+            })
         } else {
             Err(AstError::new("", span))
         }

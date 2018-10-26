@@ -14,10 +14,10 @@ pub enum TyKind {
     Struct(Id),
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Ty {
-    kind: TyKind,
-    ptr: usize,
+    pub kind: TyKind,
+    pub ptr: usize,
 }
 
 impl Ty {
@@ -87,10 +87,10 @@ impl Ty {
                         _     => panic!("Unsupported integer type"),
                     }
                 },
-                _ => Err(AstError::new("Unexpected token", span)),
+                _ => Err(AstError::new(format!("Unexpected token {:?}", r.as_rule()), span)),
             }
         } else {
-            Err(AstError::new("Unexpected end of tokens.", span))
+            Err(AstError::new("Unexpected end of tokens in ty", span))
         }
     }
 }

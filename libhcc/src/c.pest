@@ -39,7 +39,7 @@ extern_kw = { "extern" }
 static_kw = { "static" }
 auto_kw = { "auto" }
 register_kw = { "register" }
-void_kw = { "void" | "u0" }
+void_kw = { "void" | "u0" | "i0" }
 int_type = { // "u8" |
     //"u16" | "u32" |
     "i64" | "i8"
@@ -53,8 +53,8 @@ const_kw = { "const" }
 volatile_kw = { "volatile" }
 case_kw = { "case" }
 default_kw = { "default" }
-if_kw = { "if" }
-else_kw = { "else" }
+if_kw = _{ "if" }
+else_kw = _{ "else" }
 return_kw = { "return" }
 continue_kw = { "continue" }
 switch_kw = { "switch" }
@@ -144,20 +144,21 @@ declaration_specifiers = {
 }
 
 init_declarator_list = { init_declarator ~ ( comma ~ init_declarator )* }
-init_declarator = { declarator ~ ( eq ~ initializer )? }
+init_declarator = { declarator ~ ( eq ~ assign_expr )? }
+//initializer )? }
 
 storage_class_specifier = { typedef_kw | extern_kw | static_kw | auto_kw | register_kw }
-type_specifier = { void_kw | int_type | struct_or_union_spec |
+type_specifier = { void_kw | int_type | struct_or_union_spec
 //enum_specifier |
-ident }
+}
 
 struct_or_union = _{
     struct_kw
     // | union_kw
 }
 struct_or_union_spec = {
-      ( struct_or_union ~ (ident ~ (colon ~ struct_or_union ~ ident)? ) ~ lbrace ~ struct_declaration_list ~ rbrace )
-    | ( struct_or_union ~ ident )
+      ( struct_kw ~ ident ~ (colon ~ struct_or_union ~ ident)? ~ lbrace ~ struct_declaration_list ~ rbrace )
+    | ( struct_kw ~ ident )
 }
 
 struct_declaration_list = { struct_declaration+ }
@@ -219,7 +220,7 @@ direct_abstract_declarator = {
 
 initializer = {
       assign_expr
-    | ( lbrace ~ initializer_list ~ comma? ~ rbrace )
+    //| ( lbrace ~ initializer_list ~ comma? ~ rbrace )
 }
 
 initializer_list = { initializer ~ ( comma ~ initializer )* }

@@ -27,7 +27,18 @@ impl Body {
         let mut pairs = pair.into_inner();
         let mut stmts = vec![];
         let mut locals = HashMap::new();
-        while let Some(pair) = pairs.next() { stmts.push(Statement::from_pair(pair, context)?); }
+        while let Some(pair) = pairs.next() {
+            match pair.as_rule() {
+                Rule::declaration => {
+                    for declaration in Declaration::from_pair(pair, context)? {
+                        stmts.push(Statement::Declaration(declaration));
+                    }
+                },
+                _ => {
+                    stmts.push(Statement::from_pair(pair, context)?);
+                }
+            };
+        }
         Ok(Body {
             locals,
             stmts
@@ -44,7 +55,7 @@ pub struct IfStmt {
 impl IfStmt {
     pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
         -> Result<IfStmt, AstError> {
-        debug_assert!(pair.as_rule() == Rule::iteration_stmt);
+        debug_assert!(pair.as_rule() == Rule::selection_stmt);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
         let cond = Expr::from_pair(expect!(pairs, Rule::expr, "expr", span), context)?;
@@ -79,7 +90,7 @@ impl WhileStmt {
                     Err(AstError::new(format!("Unexpected rule {:?}.", pair.as_rule()), pair.as_span())),
             }
         } else {
-            Err(AstError::new("Unexpected end of tokens.", span))
+            Err(AstError::new("Unexpected end of tokens in WhileStmt", span))
         }
     }
 
