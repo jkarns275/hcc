@@ -84,10 +84,13 @@ primary_expr = { ident | int_lit | (lparen ~ expr ~ rparen) }
 postfix_deref = { struct_deref_op ~ ident }
 postfix_index = { lbrack ~ expr ~ rbrack }
 postfix_call = { lparen ~ argument_expr_list ~ rparen }
+postfix_dot_call = { dot ~ ident ~ lparen ~ argument_expr_list ~ rparen }
+postfix_deref_call = { struct_deref_op ~ ident ~ lparen ~ argument_expr_list ~ rparen }
 postfix_dot = { dot ~ ident }
 
 postfix_expr = {
-    primary_expr ~ ( postfix_index | postfix_call | postfix_dot | postfix_deref )* }
+    primary_expr ~ ( postfix_index | postfix_call | postfix_deref_call | 
+    postfix_dot_call | postfix_dot | postfix_deref )* }
 
 argument_expr_list = { (assign_expr ~ (comma ~ assign_expr)*)? }
 

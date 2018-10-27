@@ -83,7 +83,6 @@ impl AstError {
     }
 }
 
-
 pub struct Ast<'a> {
     pub idstore: IdStore<'a>,
     pub structs: HashMap<Id, Rc<Structure>>,

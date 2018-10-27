@@ -109,7 +109,7 @@ impl WhileStmt {
         };
 
         if let Some(stmt) = third {
-            pbody.stmts.push(Statement::Expr(box stmt));
+            pbody.stmts.push(Statement::Expr(stmt));
         }
 
         let wh = Statement::While(box WhileStmt {
@@ -217,8 +217,8 @@ pub enum Statement {
     Body(Box<Body>),
     If(Box<IfStmt>),
     While(Box<WhileStmt>),
-    Expr(Box<Expr>),
-    Jump(Box<JumpStmt>),
+    Expr(Expr),
+    Jump(JumpStmt),
     Declaration(Declaration)
 }
 
@@ -237,9 +237,9 @@ impl Statement {
                 Rule::selection_stmt =>
                     Ok(Statement::If(box IfStmt::from_pair(pair, context)?)),
                 Rule::expr_stmt =>
-                    Ok(Statement::Expr(box Expr::from_expr_stmt_pair(pair, context)?)),
+                    Ok(Statement::Expr(Expr::from_expr_stmt_pair(pair, context)?)),
                 Rule::jump_stmt =>
-                    Ok(Statement::Jump(box JumpStmt::from_pair(pair, context)?)),
+                    Ok(Statement::Jump(JumpStmt::from_pair(pair, context)?)),
                 _ => Err(AstError::new(format!("Unexpected rule: {:?}", pair.as_rule()), span)),
             }
         } else {
