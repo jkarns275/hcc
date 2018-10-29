@@ -118,6 +118,7 @@ impl Structure {
                         name: context.idstore.get_id("this"),
                         ty: Ty { kind: TyKind::Struct(name), ptr: 1 },
                         initializer: None,
+                        span: PosSpan::from_span(span.clone()),
                     });
                 }
             }

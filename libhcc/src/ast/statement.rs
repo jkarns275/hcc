@@ -154,6 +154,7 @@ impl WhileStmt {
             Ok(Expr {
                 span: PosSpan::from_span(span),
                 expr: ExprKind::Number(1),
+                ty: None,
             })
         }
     }

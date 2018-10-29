@@ -9,6 +9,7 @@ use ast::AstError;
 use ast::declaration::Declaration;
 use ast::ty::TyKind;
 use ast::expr::*;
+use visitors::typecheck::*;
 
 pub struct Function {
     pub name: Id,
@@ -90,6 +91,7 @@ impl Function {
                         name: this,
                         ty: Ty { kind: TyKind::Struct(this), ptr: 1},
                         initializer: None,
+                        span: PosSpan::from_span(span.clone()),
                     });
                 }
 
@@ -133,7 +135,7 @@ impl Function {
             let arg_dec = self.args[argid];
             let arg_ty = arg_dec.ty.clone();
 
-            let sup_ty  = supplied.typeof();
+            let sup_ty  = supplied.type_of(tc);
 
             let arg_conformity = sup_ty.conforms_to_mag(arg_ty, tc);
             if arg_conformity == 0 {

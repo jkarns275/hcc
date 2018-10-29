@@ -5,6 +5,8 @@ use ast::context::Context;
 use ast::AstError;
 use ast::id::Id;
 
+use visitors::typecheck::*;
+
 use parser::Rule;
 
 use pest::iterators::Pair;
@@ -53,7 +55,7 @@ impl Ty {
     }
 
     pub fn is_integral_type(&self) -> bool {
-        match self {
+        match self.kind {
             TyKind::I8 | TyKind::I64 => {
                 true
             },
@@ -149,6 +151,10 @@ impl Ty {
         } else {
             Err(AstError::new("Unexpected end of tokens in ty", span))
         }
+    }
+
+    pub fn has_field(&self, name: Id, tc: &TypeChecker) -> bool {
+        panic!()
     }
 }
 

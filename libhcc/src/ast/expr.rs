@@ -4,8 +4,11 @@ use ast::ty::Ty;
 use ast::AstError;
 use ast::PosSpan;
 use parser::Rule;
+
 use pest::iterators::Pair;
 use pest::iterators::Pairs;
+
+use visitors::typecheck::*;
 
 macro_rules! arithmetic_expr {
     ( $name:ident, $op_ty_name:ident ) => {
@@ -291,6 +294,7 @@ impl PostfixExpr {
                             base: expr,
                             offset: index,
                         }),
+                        ty: None,
                     };
                 }
                 Rule::postfix_call => {
@@ -304,10 +308,11 @@ impl PostfixExpr {
                     }
                     if let ExprKind::Ident(id) = expr.expr {
                         expr = Expr {
-                            span: posspan,
+                            span: posspan.clone(),
                             expr: ExprKind::Call(box Call {
                                 fn_name: id,
                                 args,
+                                span: posspan
                             }),
                             ty: None,
                         }
@@ -339,7 +344,8 @@ impl PostfixExpr {
                             lhs: expr,
                             method_name: id,
                             args,
-                        })
+                        }),
+                        ty: None,
                     }
                 },
                 Rule::postfix_dot => {
@@ -364,6 +370,7 @@ impl PostfixExpr {
                                 field_name: id,
                             }
                         ),
+                        ty: None,
                     };
                 }
                 _ => panic!(),
@@ -458,6 +465,7 @@ impl UnaryExpr {
                                 span: posspan.clone(),
                             }),
                         },
+                        ty: None,
                     }
                 }
                 Rule::postfix_expr => PostfixExpr::from_pair(next, context)?,
@@ -557,6 +565,7 @@ pub struct Dot {
 
 pub struct Call {
     pub fn_name: Id,
+    pub span: PosSpan,
     pub args: Vec<Expr>,
 }
 
@@ -628,19 +637,20 @@ impl Expr {
             Ok(Expr {
                 span: PosSpan::from_span(span),
                 expr: ExprKind::NoOp,
+                ty: None,
             })
         }
     }
 
-    pub fn typeof(&mut self, tc: &TypeChecker) -> Ty {
+    pub fn type_of(&mut self, tc: &TypeChecker) -> Ty {
         if let Some(ty) = self.ty.clone() {
             return ty
         }
 
         let ty = match &mut self.expr {
-            Expr::Index(index) => index.base.typeof(tc).derefed(),
-            Expr::Dot(dot) => {
-                let lhs_ty = dot.lhs.typeof(tc);
+            ExprKind::Index(index) => index.base.type_of(tc).derefed(),
+            ExprKind::Dot(dot) => {
+                let lhs_ty = dot.lhs.type_of(tc);
                 match lhs_ty.kind {
                     TyKind::Struct(id) => {
                         if let Some(struct) = tc.structs.get(&id) {
@@ -657,10 +667,10 @@ impl Expr {
                     _ => Ty::error(),
                 }
             },
-            Expr::Deref(expr) => expr.typeof(tc).derefed(),
-            Expr::MethodCall(method_call) => {
-                let lhs_ty = method_call.lhs.typeof(tc);
-                match lhs_ty.ty.as_ref() {
+            ExprKind::Deref(expr) => expr.type_of(tc).derefed(),
+            ExprKind::MethodCall(method_call) => {
+                let lhs_ty = method_call.lhs.type_of(tc);
+                match lhs_ty.kind.clone() {
                     TyKind::Struct(id) => {
                         if let Some(structure) = tc.structs.get(&id) {
                             if let Some(methods)
@@ -676,18 +686,19 @@ impl Expr {
                     _ => Ty::error(),
                 }
             },
-            Expr::Call(call) => {
+            ExprKind::Call(call) => {
                 if let Some(function) = tc.fns.get(call.fn_name) {
                     function.return_type.clone()
                 } else {
                     Ty::error()
                 }
             },
-            Expr::SizeOfExpr(ty) => {
+            ExprKind::SizeOfExpr(ty) => Ty::new(TyKind::I64),
+            _ => panic!(),
+            /*Expr::MulExpr(mul_expr) => {
                 
             },
-            Expr::MulExpr(mul_expr),
-            Expr::AddExpr(add_expr),
+            Expr::AddExpr(add_expru64),
             Expr::CmpExpr(cmp_expr),
             Expr::EqExpr(eq_expr),
             Expr::InverseExpr(expr),
@@ -697,7 +708,7 @@ impl Expr {
             Expr::Cast(cast),
             Expr::Ident(id),
             Expr::Number(_n),
-            Expr::NoOp,
+            Expr::NoOp,*/
         };
         self.ty = Some(ty.clone());
         ty
