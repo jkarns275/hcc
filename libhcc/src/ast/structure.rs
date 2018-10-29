@@ -17,11 +17,6 @@ use pest::Position;
 use ast::PosSpan;
 use ast::declaration::Declaration;
 
-pub enum StructDeclaration {
-    Single(Vec<Declarator>),
-    Multi(Vec<Declarator>)
-}
-
 pub struct StructField {
     pub ty: Ty,
     pub span: PosSpan,

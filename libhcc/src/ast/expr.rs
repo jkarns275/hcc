@@ -59,6 +59,7 @@ macro_rules! arithmetic_expr {
                         Ok(Expr {
                             span: PosSpan::from_span(span),
                             expr: ExprKind::$name(box expr),
+                            ty: None,
                         })
                     }
                 } else {
@@ -220,6 +221,7 @@ impl IntLit {
                     i64::from_str_radix(next.as_str(), radix)
                         .expect("Parser allowed invalid integer literal!"),
                 ),
+                ty: None,
             })
         } else {
             Err(AstError::new("Unexpected end of tokens in IntLit", span))
@@ -245,6 +247,7 @@ impl PrimaryExpr {
                     Expr {
                         span: posspan,
                         expr: ExprKind::Ident(id),
+                        ty: None,
                     }
                 }
                 Rule::int_lit => IntLit::from_pair(next, context)?,
@@ -305,7 +308,8 @@ impl PostfixExpr {
                             expr: ExprKind::Call(box Call {
                                 fn_name: id,
                                 args,
-                            })
+                            }),
+                            ty: None,
                         }
                     } else {
                         return Err(AstError::new("This should have been parsed as a method call!", span))
@@ -326,6 +330,7 @@ impl PostfixExpr {
                         expr = Expr {
                             span: posspan,
                             expr: ExprKind::Deref(box expr),
+                            ty: None,
                         }
                     }
                     expr = Expr {
@@ -342,6 +347,7 @@ impl PostfixExpr {
                     expr = Expr {
                         span: posspan,
                         expr: ExprKind::Dot(box Dot { lhs: expr, field_name: id }),
+                        ty: None,
                     };
                 }
                 Rule::postfix_deref => {
@@ -353,6 +359,7 @@ impl PostfixExpr {
                                 lhs: Expr {
                                     span: posspan,
                                     expr: ExprKind::Deref(box expr),
+                                    ty: None,
                                 },
                                 field_name: id,
                             }
@@ -420,12 +427,14 @@ impl UnaryExpr {
                                 head: Expr {
                                     expr: ExprKind::InverseExpr(cast_expr),
                                     span: posspan.clone(),
+                                    ty: None,
                                 },
                                 tail: vec![(
                                     AddOp::Add,
                                     Expr {
                                         expr: ExprKind::Number(1),
                                         span: posspan.clone(),
+                                        ty: None,
                                     },
                                 )],
                                 span: posspan.clone(),
@@ -436,12 +445,14 @@ impl UnaryExpr {
                                 head: Expr {
                                     expr: ExprKind::InverseExpr(cast_expr),
                                     span: posspan.clone(),
+                                    ty: None,
                                 },
                                 tail: vec![(
                                     EqOp::Eq,
                                     Expr {
                                         expr: ExprKind::Number(0),
                                         span: posspan.clone(),
+                                        ty: None,
                                     },
                                 )],
                                 span: posspan.clone(),
@@ -480,6 +491,7 @@ impl CastExpr {
                     Ok(Expr {
                         span: PosSpan::from_span(span),
                         expr: ExprKind::Cast(box Cast { to: ty, expr: cast_expr }),
+                        ty: None,
                     })
                 }
                 _ => unreachable!("Something is wrong with the grammar!"),
@@ -516,6 +528,7 @@ impl SizeofExpr {
                             Ok(Expr {
                                 span: PosSpan::from_span(span),
                                 expr: ExprKind::SizeOfExpr(ty),
+                                ty: None,
                             })
                         }
                         _ => unreachable!("Something is wrong with the parser!"),
@@ -584,6 +597,8 @@ pub enum ExprKind {
 pub struct Expr {
     pub span: PosSpan,
     pub expr: ExprKind,
+    // Shouldnt be directly accessed.
+    pub ty: Option<Ty>,
 }
 
 impl Expr {
@@ -615,5 +630,76 @@ impl Expr {
                 expr: ExprKind::NoOp,
             })
         }
+    }
+
+    pub fn typeof(&mut self, tc: &TypeChecker) -> Ty {
+        if let Some(ty) = self.ty.clone() {
+            return ty
+        }
+
+        let ty = match &mut self.expr {
+            Expr::Index(index) => index.base.typeof(tc).derefed(),
+            Expr::Dot(dot) => {
+                let lhs_ty = dot.lhs.typeof(tc);
+                match lhs_ty.kind {
+                    TyKind::Struct(id) => {
+                        if let Some(struct) = tc.structs.get(&id) {
+                            if let Some(struct_field) 
+                                = struct.fields.get(&dot.field_name) {
+                                struct_field.ty.clone()
+                            } else {
+                                Ty::error()
+                            }
+                        } else {
+                            Ty::error()
+                        }
+                    },
+                    _ => Ty::error(),
+                }
+            },
+            Expr::Deref(expr) => expr.typeof(tc).derefed(),
+            Expr::MethodCall(method_call) => {
+                let lhs_ty = method_call.lhs.typeof(tc);
+                match lhs_ty.ty.as_ref() {
+                    TyKind::Struct(id) => {
+                        if let Some(structure) = tc.structs.get(&id) {
+                            if let Some(methods)
+                                = structure.methods.get(&method_call.method_name) {
+                                methods[0].return_type.clone()
+                            } else {
+                                Ty::error()
+                            }
+                        } else {
+                            Ty::error()
+                        }
+                    },
+                    _ => Ty::error(),
+                }
+            },
+            Expr::Call(call) => {
+                if let Some(function) = tc.fns.get(call.fn_name) {
+                    function.return_type.clone()
+                } else {
+                    Ty::error()
+                }
+            },
+            Expr::SizeOfExpr(ty) => {
+                
+            },
+            Expr::MulExpr(mul_expr),
+            Expr::AddExpr(add_expr),
+            Expr::CmpExpr(cmp_expr),
+            Expr::EqExpr(eq_expr),
+            Expr::InverseExpr(expr),
+            Expr::NotExpr(expr),
+            Expr::AssignExpr(assign_expr),
+            Expr::LeaExpr(expr),
+            Expr::Cast(cast),
+            Expr::Ident(id),
+            Expr::Number(_n),
+            Expr::NoOp,
+        };
+        self.ty = Some(ty.clone());
+        ty
     }
 }

@@ -110,6 +110,8 @@ impl<'a> Ast<'a> {
 
         let mut program = program.into_inner();
 
+        println!("Remember to connect method stubs with method definitions.");
+
         while let Some(pair) = program.next() {
             match pair.as_rule() {
                 Rule::struct_or_union_spec => {

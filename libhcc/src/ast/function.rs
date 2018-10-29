@@ -8,6 +8,7 @@ use ast::context::Context;
 use ast::AstError;
 use ast::declaration::Declaration;
 use ast::ty::TyKind;
+use ast::expr::*;
 
 pub struct Function {
     pub name: Id,
@@ -117,5 +118,29 @@ impl Function {
         let mut pairs = pair.into_inner();
         let type_specifier = expect!(pairs, Rule::type_specifier, "type specifier", span);
         Ok(Ty::from_pair(type_specifier, context)?)
+    }
+
+    /// Returns 0 on no match, and returns a number that corresponds to the closeness
+    /// of the match if there is a match. The lower the number, the closer the match. 
+    pub fn conforms_to(&mut self, args: &[Expr], tc: &TypeChecker)
+        -> u64 {
+        if self.arg_order.len() != args.len() {
+            return 0
+        }
+
+        let mut conformity = 1;
+        for (argid, supplied) in self.arg_order.iter().zip(args.iter()) {
+            let arg_dec = self.args[argid];
+            let arg_ty = arg_dec.ty.clone();
+
+            let sup_ty  = supplied.typeof();
+
+            let arg_conformity = sup_ty.conforms_to_mag(arg_ty, tc);
+            if arg_conformity == 0 {
+                return 0
+            }
+            conformity += arg_conformity;
+        }
+        conformity
     }
 }

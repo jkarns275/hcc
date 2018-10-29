@@ -5,12 +5,14 @@ use ast::context::Context;
 use ast::AstError;
 use parser::Rule;
 use ast::declarator::Declarator;
+use ast::PosSpan;
 use ast::expr::*;
 
 pub struct Declaration {
     pub name: Id,
     pub ty: Ty,
     pub initializer: Option<Expr>,
+    pub span: PosSpan,
 }
 
 impl Declaration {
@@ -18,6 +20,7 @@ impl Declaration {
         -> Result<Vec<Declaration>, AstError> {
         debug_assert!(pair.as_rule() == Rule::declaration);
         let span = pair.as_span();
+        let dec_span = PosSpan::from_span(pair.as_span());
         let mut pairs = pair.into_inner();
         let ty = Declaration::type_from_pair(
             expect!(pairs, Rule::declaration_specifiers, "declaration specifiers", span),
@@ -46,6 +49,7 @@ impl Declaration {
                 name: declarator.name,
                 ty: ty.clone().ptr_n_to(declarator.ptrs),
                 initializer,
+                span: dec_span,
             });
         }
 
@@ -70,6 +74,7 @@ impl Declaration {
             name: declarator.name,
             ty: ty.ptr_n_to(declarator.ptrs),
             initializer: None,
+            span: PosSpan::from_span(span),
         })
     }
 

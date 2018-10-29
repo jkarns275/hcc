@@ -1,10 +1,13 @@
 use std::rc::Rc;
+
 use ast::structure::Structure;
-use ast::AstError;
-use pest::iterators::Pair;
-use ast::id::Id;
-use parser::Rule;
 use ast::context::Context;
+use ast::AstError;
+use ast::id::Id;
+
+use parser::Rule;
+
+use pest::iterators::Pair;
 
 #[derive(PartialEq, Eq, Clone)]
 pub enum TyKind {
@@ -12,6 +15,7 @@ pub enum TyKind {
     I8,
     I64,
     Struct(Id),
+    Error,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -26,6 +30,10 @@ impl Ty {
         Ty { kind, ptr: 0 }
     }
 
+    pub fn error() -> Self {
+        Ty { kind: TyKind::Error, ptr: 0 }
+    }
+
     pub fn ptr_to(mut self) -> Ty {
         self.ptr += 1;
         self
@@ -33,6 +41,55 @@ impl Ty {
     pub fn ptr_n_to(mut self, n: usize) -> Ty {
         self.ptr += n;
         self
+    }
+
+    pub fn derefed(mut self) -> Ty {
+        if self.ptr == 0 {
+            self.kind = TyKind::Error;
+        } else {
+            self.ptr -= 1;
+        }
+        self
+    }
+
+    pub fn is_integral_type(&self) -> bool {
+        match self {
+            TyKind::I8 | TyKind::I64 => {
+                true
+            },
+            _ => false,
+        }
+    }
+
+    pub fn conforms_to_mag(&self, other: Ty, tc: &TypeChecker) -> u64 {
+        let mut conformity = 0;
+        
+        match (self.kind.clone(), other.kind.clone()) {
+            (TyKind::Error, _) => 1,
+            (_, TyKind::Error) => 1,
+            (TyKind::Struct(mut self_name), TyKind::Struct(mut other_name)) => {
+                conformity = 1;
+                loop {
+                    if self_name == other_name {
+                        return conformity
+                    }
+
+                    if let Some(parent_name) = tc.structs[self_name].parent.clone() {
+                        self_name = parent_name;
+                    } else {
+                        return 0
+                    }
+                }
+            },
+            _ @ a => 
+                if a.0 == a.b { 1 } 
+                else if a.0.is_integral_type() && a.1.is_integral_type() { 1 }
+                else { 0 },
+        }
+    }
+
+    pub fn conforms_to(&self, other: Ty, tc: &TypeChecker) -> bool {
+        self.conforms_to_mag(other, tc) > 0
     }
 
     pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
@@ -94,3 +151,4 @@ impl Ty {
         }
     }
 }
+
