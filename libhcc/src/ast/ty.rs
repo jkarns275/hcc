@@ -11,7 +11,13 @@ use parser::Rule;
 
 use pest::iterators::Pair;
 
-#[derive(PartialEq, Eq, Clone)]
+pub enum TypeCompatibility {
+    None,
+    CastTo(Ty),
+    Ok
+}
+
+#[derive(PartialEq, Eq, Clone, Hash)]
 pub enum TyKind {
     I0,
     I8,
@@ -20,7 +26,7 @@ pub enum TyKind {
     Error,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Ty {
     pub kind: TyKind,
     pub ptr: usize,
@@ -76,17 +82,55 @@ impl Ty {
                         return conformity
                     }
 
-                    if let Some(parent_name) = tc.structs[self_name].parent.clone() {
+                    if let Some(parent_name) = tc.structs[&self_name].parent.clone() {
                         self_name = parent_name;
                     } else {
                         return 0
                     }
                 }
             },
-            _ @ a => 
+            a @ _ => 
                 if a.0 == a.b { 1 } 
                 else if a.0.is_integral_type() && a.1.is_integral_type() { 1 }
                 else { 0 },
+        }
+    }
+
+    pub fn compatibility_with(&self, other: &Ty, tc: &TypeChecker) -> TypeCompatibility {
+        match (self.ptr == 0, other.ptr == 0) {
+            (true, true) => {
+                match (self.kind.clone(), other.kind.clone()) {
+                    (TyKind::Struct(exp), TyKind::Struct(got_name)) => {
+                        if exp == got_name {
+                            TypeCompatibility::Ok
+                        } else {
+                            TypeCompatibility::None
+                        }
+                    },
+                    (TyKind::I64, TyKind::I64)  => TypeCompatibility::Ok,
+                    (TyKind::I8, TyKind::I8)    => TypeCompatibility::Ok,
+                    (TyKind::I64, TyKind::I8)   => TypeCompatibility::CastTo(Ty::new(TyKind::I64)),
+                    (TyKind::I8, TyKind::I64)   => TypeCompatibility::CastTo(Ty::new(TyKind::I8)),
+                    (_, _) => TypeCompatibility::None,
+                }
+            },
+            (true, false) => {
+                match self.ty.clone() => {
+                    TyKind::Struct(_) => TypeCompatibility::None,
+                    TyKind::I64 => TypeCompatibility::CastTo(Ty::new(TyKind::I64)),
+                    TyKind::I8 => TypeCompatibility::CastTo(Ty::new(TyKind::I8)),
+                    _ => TypeCompatibility::None,
+                }
+            },
+            (false, true) => {
+                match other.ty.clone() => {
+                    TyKind::I64 | TyKind::I8 => TypeCompatibility::CastTo(self.clone()),
+                    _ => ,
+                }
+            },
+            (false, false) => {
+                TypeCompatibility::CastTo(self.clone())
+            },
         }
     }
 

@@ -10,6 +10,7 @@ use ast::declaration::Declaration;
 use ast::ty::TyKind;
 use ast::expr::*;
 use visitors::typecheck::*;
+use visitors::Visitor;
 
 pub struct Function {
     pub name: Id,
@@ -124,18 +125,18 @@ impl Function {
 
     /// Returns 0 on no match, and returns a number that corresponds to the closeness
     /// of the match if there is a match. The lower the number, the closer the match. 
-    pub fn conforms_to(&mut self, args: &[Expr], tc: &TypeChecker)
+    pub fn conforms_to(&mut self, args: &[Expr], tc: &mut TypeChecker)
         -> u64 {
         if self.arg_order.len() != args.len() {
             return 0
         }
 
         let mut conformity = 1;
-        for (argid, supplied) in self.arg_order.iter().zip(args.iter()) {
+        for (argid, supplied) in self.arg_order.iter().zip(args.iter_mut()) {
             let arg_dec = self.args[argid];
             let arg_ty = arg_dec.ty.clone();
 
-            let sup_ty  = supplied.type_of(tc);
+            let sup_ty = tc.visit_expr(supplied);
 
             let arg_conformity = sup_ty.conforms_to_mag(arg_ty, tc);
             if arg_conformity == 0 {

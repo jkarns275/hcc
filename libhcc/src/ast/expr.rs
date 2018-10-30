@@ -181,6 +181,7 @@ impl AssignOp {
     }
 }
 
+#[derive(Hash, Eq, PartialEq)]
 pub enum EqOp {
     Eq,
     Neq,
@@ -606,7 +607,6 @@ pub enum ExprKind {
 pub struct Expr {
     pub span: PosSpan,
     pub expr: ExprKind,
-    // Shouldnt be directly accessed.
     pub ty: Option<Ty>,
 }
 
@@ -642,75 +642,4 @@ impl Expr {
         }
     }
 
-    pub fn type_of(&mut self, tc: &TypeChecker) -> Ty {
-        if let Some(ty) = self.ty.clone() {
-            return ty
-        }
-
-        let ty = match &mut self.expr {
-            ExprKind::Index(index) => index.base.type_of(tc).derefed(),
-            ExprKind::Dot(dot) => {
-                let lhs_ty = dot.lhs.type_of(tc);
-                match lhs_ty.kind {
-                    TyKind::Struct(id) => {
-                        if let Some(struct) = tc.structs.get(&id) {
-                            if let Some(struct_field) 
-                                = struct.fields.get(&dot.field_name) {
-                                struct_field.ty.clone()
-                            } else {
-                                Ty::error()
-                            }
-                        } else {
-                            Ty::error()
-                        }
-                    },
-                    _ => Ty::error(),
-                }
-            },
-            ExprKind::Deref(expr) => expr.type_of(tc).derefed(),
-            ExprKind::MethodCall(method_call) => {
-                let lhs_ty = method_call.lhs.type_of(tc);
-                match lhs_ty.kind.clone() {
-                    TyKind::Struct(id) => {
-                        if let Some(structure) = tc.structs.get(&id) {
-                            if let Some(methods)
-                                = structure.methods.get(&method_call.method_name) {
-                                methods[0].return_type.clone()
-                            } else {
-                                Ty::error()
-                            }
-                        } else {
-                            Ty::error()
-                        }
-                    },
-                    _ => Ty::error(),
-                }
-            },
-            ExprKind::Call(call) => {
-                if let Some(function) = tc.fns.get(call.fn_name) {
-                    function.return_type.clone()
-                } else {
-                    Ty::error()
-                }
-            },
-            ExprKind::SizeOfExpr(ty) => Ty::new(TyKind::I64),
-            _ => panic!(),
-            /*Expr::MulExpr(mul_expr) => {
-                
-            },
-            Expr::AddExpr(add_expru64),
-            Expr::CmpExpr(cmp_expr),
-            Expr::EqExpr(eq_expr),
-            Expr::InverseExpr(expr),
-            Expr::NotExpr(expr),
-            Expr::AssignExpr(assign_expr),
-            Expr::LeaExpr(expr),
-            Expr::Cast(cast),
-            Expr::Ident(id),
-            Expr::Number(_n),
-            Expr::NoOp,*/
-        };
-        self.ty = Some(ty.clone());
-        ty
-    }
 }
