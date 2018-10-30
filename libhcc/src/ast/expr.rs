@@ -577,8 +577,8 @@ pub struct MethodCall {
 }
 
 pub struct Cast {
-    to: Ty,
-    expr: Expr,
+    pub to: Ty,
+    pub expr: Expr,
 }
 
 pub enum ExprKind {

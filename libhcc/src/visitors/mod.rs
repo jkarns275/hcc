@@ -5,10 +5,11 @@ use ast::id::*;
 use ast::declaration::*;
 use ast::function::*;
 use ast::ty::*;
+use ast::*;
 
 pub mod typecheck;
 
-trait Visitor {
+pub trait Visitor {
 
     fn visit_struct(&mut self, it: &mut Structure) -> Ty;
 
@@ -78,7 +79,6 @@ trait Visitor {
     fn visit_structure(&mut self, it: &mut Structure) -> Ty;
     fn visit_ty(&mut self, it: &mut Ty) -> Ty;
     fn visit_id(&mut self, it: &mut Id) -> Ty;
-    fn visit_declaration(&mut self, it: &mut Declaration) -> Ty;
 }
 
 trait Visitable {

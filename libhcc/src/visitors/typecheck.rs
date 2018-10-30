@@ -8,6 +8,7 @@ use ast::ty::*;
 use super::Visitor;
 use ast::PosSpan;
 
+use std::cmp::Ordering;
 use std::rc::Rc;
 use std::collections::{VecDeque, HashMap};
 use std::u64;
@@ -29,7 +30,7 @@ pub enum TypeErrorKind {
     Redeclaration { name: Id },
     NoSuchStruct { struct_name: Id },
     IncompatibleTypes { got: Ty, expected: Ty, },
-    IllegalBinaryOperation { op: Strign, got: Ty, }
+    IllegalBinaryOperation { op: String, got: Ty, }
 }
 
 pub struct TypeError {
@@ -69,10 +70,10 @@ impl TypeChecker {
         }
     }
 
-    fn binary_expr_visit<T>(&mut self, op: String, span: PosSpan, head: &mut Expr, tail: &[(T, Expr)])
+    fn binary_expr_visit<T>(&mut self, op: &str, span: PosSpan, head: &mut Expr, tail: &mut [(T, Expr)])
         -> Ty {
         let mut errs = false;
-        let mut tys = vec![self.visit_expr(&mut it.head)];
+        let mut tys = vec![self.visit_expr(head)];
         self.numeric_type_hint.push(tys[0].clone());
         for (_op, exp) in tail.iter_mut() {
             let ty = self.visit_expr(exp);
@@ -82,7 +83,7 @@ impl TypeChecker {
                     errs = true;
                     self.errs.push(
                         TypeError {
-                            err: TypeErrorKind::IllegalBinaryOperation { op, got: ty.clone() },
+                            err: TypeErrorKind::IllegalBinaryOperation { op: op.to_string(), got: ty.clone() },
                             span: exp.span.clone(),
                         }
                     );
@@ -107,7 +108,7 @@ impl TypeChecker {
                     if largest_type.kind == TyKind::I8 {
                         largest_type = ty.clone();
                     },
-                TyKind::I8 => { },
+                _ => { },
             }
         }
 
@@ -171,7 +172,7 @@ impl Visitor for TypeChecker {
     fn visit_declaration(&mut self, it: &mut Declaration) -> Ty {
         let expected = it.ty.clone();
         match &expected.kind {
-            x @ TyKind::I64 | TyKind::I8 => self.numeric_type_hint.push(Ty::new(x.clone())),
+            x @ TyKind::I64 | x @ TyKind::I8 => self.numeric_type_hint.push(Ty::new(x.clone())),
             _ => (),
         };
         let span = it.span.clone();
@@ -260,7 +261,7 @@ impl Visitor for TypeChecker {
             TyKind::Struct(id) => {
                 if let Some(st) = self.structs.get(&id) {
                     if let Some(struct_field) 
-                        = st.fields.get(&dot.field_name) {
+                        = st.fields.get(&it.field_name) {
                         struct_field.ty.clone()
                     } else {
                         Ty::error()
@@ -307,7 +308,7 @@ impl Visitor for TypeChecker {
 
         if let Some(ref fns) = self.fns.get(&it.fn_name).clone() {
             for i in 0..fns.len() {
-                let conformity = fns[i].conforms_to(&it.args[..], self);
+                let conformity = fns[i].conforms_to(&mut it.args[..], self);
                 if conformity > 0 {
                     if conformity < min_conformity {
                         conforming_indices.clear();
@@ -363,7 +364,7 @@ impl Visitor for TypeChecker {
             args.push(self.visit_expr(arg));
         }
         
-        let struct_name = match lhs_ty.kind {
+        let struct_name = match lhs_ty.kind.clone() {
             TyKind::Struct(id) => id,
             ty @ _ => {
                 self.errs.push(
@@ -378,20 +379,20 @@ impl Visitor for TypeChecker {
 
         let mut depth = 0;
         let mut min_conformity = u64::MAX;
-        let mut conforming_struct = self.structs.get(&struct_name).clone();
+        let mut conforming_struct = self.structs.get(&struct_name).map(|r| (*r).clone());
         let mut conforming_indices = vec![];
         let mut cur_struct = Some(struct_name);
         while let Some(name) = cur_struct.clone() {
-            if let Some(ref st) = self.structs.get_mut(&name) {
+            if let Some(ref st) = self.structs.get_mut(&name).map(|t| t.clone()) {
                 let struct_name = st.name;
                 if let Some(ref methods) = st.methods.get(&it.method_name).map(|r| r.clone()) {
                     for i in 0..methods.len() {
-                        let conformity = methods[i].conforms_to(&it.args[..], self) + depth;
+                        let conformity = methods.get(i).unwrap().conforms_to(&mut it.args[..], self) + depth;
                         if conformity > 0 {
                             if conformity < min_conformity {
                                 conforming_indices.clear();
                                 min_conformity = conformity;
-                                conforming_struct = self.structs.get(&struct_name).clone();
+                                conforming_struct = self.structs.get(&struct_name).map(|r| (*r).clone());
                             }
                             conforming_indices.push((struct_name, i));
                         }
@@ -451,7 +452,7 @@ impl Visitor for TypeChecker {
         }
     }
     fn visit_mulexpr(&mut self, it: &mut MulExpr) -> Ty {
-        self.binary_expr_visit("*".to_string(), it.span.clone(), &mut it.head, &mut it.tail[..])
+        self.binary_expr_visit("*", it.span.clone(), &mut it.head, &mut it.tail[..])
     }
     fn visit_addexpr(&mut self, it: &mut AddExpr) -> Ty {
         Ty::new(TyKind::I0)

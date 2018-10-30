@@ -89,9 +89,9 @@ impl Ty {
                     }
                 }
             },
-            a @ _ => 
-                if a.0 == a.b { 1 } 
-                else if a.0.is_integral_type() && a.1.is_integral_type() { 1 }
+            _ => 
+                if self.kind == other.kind { 1 } 
+                else if self.is_integral_type() && other.is_integral_type() { 1 }
                 else { 0 },
         }
     }
@@ -115,7 +115,7 @@ impl Ty {
                 }
             },
             (true, false) => {
-                match self.ty.clone() => {
+                match self.kind.clone() {
                     TyKind::Struct(_) => TypeCompatibility::None,
                     TyKind::I64 => TypeCompatibility::CastTo(Ty::new(TyKind::I64)),
                     TyKind::I8 => TypeCompatibility::CastTo(Ty::new(TyKind::I8)),
@@ -123,9 +123,9 @@ impl Ty {
                 }
             },
             (false, true) => {
-                match other.ty.clone() => {
+                match other.kind.clone() {
                     TyKind::I64 | TyKind::I8 => TypeCompatibility::CastTo(self.clone()),
-                    _ => ,
+                    _ => TypeCompatibility::None,
                 }
             },
             (false, false) => {
