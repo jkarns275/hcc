@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 pub type Id = usize;
 
+#[derive(Clone)]
 pub struct IdStore<'a> {
     ids: Vec<&'a str>,
     map: HashMap<&'a str, usize>,
@@ -17,11 +18,12 @@ impl<'a> IdStore<'a> {
 
     pub fn get_id(&mut self, s: &'a str) -> Id {
         if self.map.contains_key(s) {
-            self.map[s]
+            let id = self.map[s];
+            id
         } else {
             let id = self.ids.len();
             self.ids.push(s);
-            self.map.insert(s, self.ids.len());
+            self.map.insert(s, id);
             id
         }
     }

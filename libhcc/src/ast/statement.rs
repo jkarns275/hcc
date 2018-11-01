@@ -6,7 +6,6 @@ use ast::context::Context;
 use pest::iterators::Pair;
 use parser::Rule;
 use ast::AstError;
-use ast::function::Function;
 use std::prelude::v1::Result::Err;
 use pest::iterators::Pairs;
 use pest::Span;
@@ -23,7 +22,6 @@ impl Body {
     pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
         -> Result<Body, AstError> {
         debug_assert!(pair.as_rule() == Rule::compound_stmt);
-        let span = pair.as_span();
         let mut pairs = pair.into_inner();
         let mut stmts = vec![];
         let mut locals = HashMap::new();
@@ -31,6 +29,7 @@ impl Body {
             match pair.as_rule() {
                 Rule::declaration => {
                     for declaration in Declaration::from_pair(pair, context)? {
+                        locals.insert(declaration.name, declaration.ty.clone());
                         stmts.push(Statement::Declaration(declaration));
                     }
                 },
@@ -134,7 +133,6 @@ impl WhileStmt {
     fn for_first<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
         -> Result<Option<Vec<Declaration>>, AstError> {
         debug_assert!(pair.as_rule() == Rule::for_first);
-        let span = pair.as_span();
         let mut pairs = pair.into_inner();
         if let Some(next) = pairs.next() {
             Ok(Some(Declaration::from_pair(next, context)?))
@@ -162,7 +160,6 @@ impl WhileStmt {
     fn for_third<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
         -> Result<Option<Expr>, AstError> {
         debug_assert!(pair.as_rule() == Rule::for_third);
-        let span = pair.as_span();
         let mut pairs = pair.into_inner();
         if let Some(next) = pairs.next() {
             Ok(Some(Expr::from_pair(next, context)?))
@@ -184,7 +181,7 @@ impl WhileStmt {
 pub enum JumpStmt {
     Break,
     Continue,
-    Return(Option<Expr>),
+    Return((Option<Expr>, PosSpan)),
 }
 
 impl JumpStmt {
@@ -197,12 +194,11 @@ impl JumpStmt {
             Ok(match r.as_rule() {
                 Rule::break_kw => JumpStmt::Break,
                 Rule::return_kw => {
-                    let span = r.as_span();
                     let mut pairs = r.into_inner();
                     if let Some(pair) = pairs.next() {
-                        JumpStmt::Return(Some(Expr::from_pair(pair, context)?))
+                        JumpStmt::Return((Some(Expr::from_pair(pair, context)?), PosSpan::from_span(span)))
                     } else {
-                        JumpStmt::Return(None)
+                        JumpStmt::Return((None, PosSpan::from_span(span)))
                     }
                 },
                 Rule::continue_kw => JumpStmt::Continue,

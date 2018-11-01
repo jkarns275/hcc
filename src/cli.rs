@@ -2,8 +2,9 @@ extern crate pest;
 use pest::Span;
 
 extern crate libhcc;
-use libhcc::{ast, parser};
+use libhcc::{ast, parser, visitors::typecheck};
 
+use typecheck::*;
 use parser::*;
 use ast::*;
 
@@ -71,17 +72,53 @@ impl NotiPrinter {
     pub fn print_noti(&self, noti_type: NotiType, span: PosSpan, noti_msg: &str) {
         let (line, col) = Span::new(self.program_text.as_str(), span.start, span.end).unwrap()
             .start_pos().line_col();
+        let (endline, endcol) = Span::new(self.program_text.as_str(), span.start, span.end).unwrap()
+            .end_pos().line_col();
         let (filename, linestart) = self.line_info.get_file_and_line_start(line).unwrap();
         let line_n_str = (line - linestart).to_string();
         let indent = " ".repeat(line_n_str.len() + 2);
         let (fg, bg) = noti_type.as_ansi_colors();
+        let lines = noti_msg.lines().collect::<Vec<_>>();
         set_color!(fg, bg);
         print!("{}:", noti_type.as_str());
         reset_color!();
-        println!(" {}", noti_msg);
+        println!(" {}", lines[0]);
         println!("{}---> {}:{}:{}", indent, filename, line_n_str, col);
         println!("{}|", indent);
-        println!(" {} |  {}", line_n_str, self.lines[line - 1]);
+        println!(" {} |  {}", line_n_str, &self.lines[line - 1][..]);
+        println!("{}|  {}{}", indent, " ".to_string().repeat(col - 1), 
+            match endcol - col {
+                1 | 0 => {
+                    "^".to_string()
+                },
+                x @ _ => {
+                    let mut x = x;
+                    if line != endline {
+                        x = self.lines[line - 1].len() - col;
+                    }
+                    let mut s = String::with_capacity(x);
+                    s.push('^');
+                    for _ in 0..x-2 {
+                        s.push('~')
+                    }
+                    s.push('^');
+                    s
+                }
+            }
+        );
+        if lines.len() > 1 {
+            println!("{}|", indent);
+            let (fg, bg) = NotiType::Note.as_ansi_colors();
+            print!("{}=", indent);
+            set_color!(fg, bg);
+            print!("note:");
+            reset_color!();
+            println!(" {}", lines[1]);
+            for i in 2..lines.len() {
+                println!("{}", lines[i]);
+            }
+        }
+        println!("");
         //  | {}^
         // lines[line - 1], "-".to_string().repeat(col));
     }
@@ -101,9 +138,6 @@ use argparse::*;
 use argparse::ArgumentParser;
 use argparse::StoreTrue;
 
-use std::fs::File;
-use std::io::prelude::*;
-
 fn main() {
     let mut check = false;
     let mut verbose = false;
@@ -122,7 +156,7 @@ fn main() {
             .add_option(&["-v", "--verbose"], StoreTrue, "verbose output");
         ap.refer(&mut wd)
             .add_option(&["-w", "--dir"], Store, "working directory");
-        ap.print_help("hcc", &mut usage);
+        ap.print_help("hcc", &mut usage).unwrap();
         ap.parse_args_or_exit();
     }
 
@@ -135,29 +169,45 @@ fn main() {
         {
             let src = file.unwrap();
             let (src, lines, line_info) = apply_pre_processor(src.as_str(), &wd);
-            let parse_res = parse(&src[..], &lines, &line_info);
-            let mut noti_printer = NotiPrinter {
+            let parse_res = parse(&src[..]);
+            let noti_printer = NotiPrinter {
                 program_text: src.to_string(),
-                line_info,
-                lines,
+                line_info: line_info.clone(),
+                lines: lines.clone(),
             };
             match parse_res {
                 Ok(parse_result) => {
-                    cli_notify("parse ok.", NotiType::Note);
                     if verbose {
+                        cli_notify("parse ok.", NotiType::Note);
                         cli_notify(format!("{:?}", parse_result).as_str(), NotiType::Verbose);
                     }
                     let mut ast = Ast::from_pairs(parse_result);
                     match ast {
                         Ok(ast) => {
-                            cli_notify("ast construction ok.", NotiType::Note);
+                            if verbose {
+                                cli_notify("ast construction ok.", NotiType::Note);
+                            }
+                            match TypeChecker::typecheck(ast) {
+                                (Ok(_ast), _warnings) => {
+                                    if verbose {
+                                        cli_notify("type check ok.", NotiType::Note);
+                                    }
+
+                                },
+                                (Err((errors, idstore)), _warnings) => {
+                                    for error in errors {
+                                        let err_str = error.to_string(&lines[..], &idstore, &line_info, &src[..]);
+                                        noti_printer.print_noti(NotiType::Error, error.span, &err_str[..])
+                                    }
+                                },
+                            }
                         },
                         Err(e) => {
                             for error in e {
                                 noti_printer.print_noti(NotiType::Error,
                                                           PosSpan {
-                                                              start: error.start,
-                                                              end: error.start },
+                                                              start: error.span.start,
+                                                              end: error.span.start },
                                                           error.err_msg.as_str());
                             }
                         },

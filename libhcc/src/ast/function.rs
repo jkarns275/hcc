@@ -7,10 +7,8 @@ use pest::iterators::Pair;
 use ast::context::Context;
 use ast::AstError;
 use ast::declaration::Declaration;
-use ast::ty::TyKind;
 use ast::expr::*;
 use visitors::typecheck::*;
-use visitors::Visitor;
 use ast::PosSpan;
 
 pub struct Function {
@@ -20,7 +18,8 @@ pub struct Function {
     pub arg_order: Vec<Id>,
     pub body: Option<Body>,
     /// Id of the Struct
-    pub method: Option<Id>
+    pub method: Option<Id>,
+    pub span: PosSpan,
 }
 
 impl Function {
@@ -43,6 +42,7 @@ impl Function {
                 return_type,
                 method,
                 body,
+                span: PosSpan::from_span(span),
             })
         } else {
             // Just a function header
@@ -53,6 +53,7 @@ impl Function {
                 return_type,
                 body: None,
                 method,
+                span: PosSpan::from_span(span),
             })
         }
     }
@@ -76,7 +77,6 @@ impl Function {
                 next = pairs.next().expect("Unexpected end of tokens in name_and_args_from_pair");
             }
             let declarator_call: Pair<'r, Rule> = next;
-            let span = declarator_call.as_span();
 
             let mut pairs = declarator_call.into_inner();
             if let Some(parameter_list) = pairs.next() {
@@ -85,17 +85,6 @@ impl Function {
                 let mut pairs = parameter_list.into_inner();
                 let mut params = HashMap::new();
                 let mut order = vec![];
-
-                if let Some(next) = method.as_ref() {
-                    let this = context.idstore.get_id("this");
-                    order.push(this);
-                    params.insert(this, Declaration {
-                        name: this,
-                        ty: Ty { kind: TyKind::Struct(this), ptr: 1},
-                        initializer: None,
-                        span: PosSpan::from_span(span.clone()),
-                    });
-                }
 
                 for pair in pairs {
                     let declaration = Declaration::parameter_declaration_from_pair(pair, context)?;
@@ -146,5 +135,15 @@ impl Function {
             conformity += arg_conformity;
         }
         conformity
+    }
+
+    pub fn header_equals(&self, other: &Function) -> bool {
+        if self.arg_order.len() != other.arg_order.len() { return false }
+        for (a, b) in self.arg_order.as_slice().iter().zip(other.arg_order.as_slice().iter()) {
+            if self.args[a].ty != other.args[b].ty {
+                return false
+            }
+        }
+        true
     }
 }

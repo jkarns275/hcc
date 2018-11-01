@@ -5,8 +5,7 @@ use ast::id::*;
 use ast::declaration::*;
 use ast::function::*;
 use ast::ty::*;
-use super::Visitor;
-use ast::PosSpan;
+use ast::*;
 
 use std::cmp::Ordering;
 use std::rc::Rc;
@@ -25,17 +24,89 @@ pub enum TypeErrorKind {
     FunctionNotFound { fn_name: Id, },
     BadFunctionArgs { fn_name: Id },
     AmbiguousFunctionArguments { fn_name: Id, indices: Vec<usize>, },
-    AmbiguousMethodArguments { method_name: Id, indices: Vec<(Id, usize)> },
+    AmbiguousMethodArguments { method_name: Id, ty: Ty, indices: Vec<(Id, usize)> },
     MethodCallOnPrimitive { ty: Ty, },
-    Redeclaration { name: Id },
     NoSuchStruct { struct_name: Id },
-    IncompatibleTypes { got: Ty, expected: Ty, },
-    IllegalBinaryOperation { op: String, got: Ty, }
+    IllegalBinaryOperation { op: &'static str, got: Ty, },
+    IllegalUnaryOperation { op: &'static str, got: Ty, },
+    IdNotFound { name: Id, },
+    InvalidCast { from: Ty, to: Ty, },
+    NoFunctionDefinition,
+    ParentFieldCollision { field_name: Id, parent_span: PosSpan },
+    DuplicateMethodDefinitions { other_span: PosSpan, ty: Ty, method_name: Id },
+    CircularInheritence { with: Ty }
 }
 
 pub struct TypeError {
     pub err: TypeErrorKind,
     pub span: PosSpan,
+}
+
+use parser::LineInfo;
+use ast::id::IdStore;
+use pest::Span;
+
+impl TypeError {
+    pub fn to_string(&self, lines: &[String], idstore: &IdStore, lineinfo: &LineInfo, program: &str) -> String {
+        match &self.err {
+            TypeErrorKind::ExpectedIntegral { got, } 
+                => format!("expected integral type, instead found '{}'", got.to_string(idstore)),
+            TypeErrorKind::WrongType { got, expected, } 
+                => format!("expected type '{}', instead found '{}'", expected.to_string(idstore), got.to_string(idstore)),
+            TypeErrorKind::NoSuchField { got, field, }
+                => format!("type '{}' has no field named '{}'", got.to_string(idstore), idstore.get_string(*field).unwrap()),
+            TypeErrorKind::NoSuchFunction { fn_name, }
+                => format!("no function with the name '{}'", idstore.get_string(*fn_name).unwrap()),
+            TypeErrorKind::NoSuchMethod { got, method_name, }
+                => format!("type '{}' has no method named '{}'", got.to_string(idstore), idstore.get_string(*method_name).unwrap()),
+            TypeErrorKind::CannotDeref { got, }
+                => format!("cannot dereference type '{}'", got.to_string(idstore)),
+            TypeErrorKind::CannotDerefToVoid
+                => "cannot dereference type 'i0'".to_string(),
+            TypeErrorKind::InvalidIndex { got, }
+                => format!("type '{}' is a valid index type", got.to_string(idstore)),
+            TypeErrorKind::FunctionNotFound { fn_name, }
+                => format!("function '{}' not found.", idstore.get_string(*fn_name).unwrap()),
+            TypeErrorKind::BadFunctionArgs { fn_name }
+                => format!("no definition of '{}' takes the supplied arguments.", idstore.get_string(*fn_name).unwrap()),
+            TypeErrorKind::AmbiguousFunctionArguments { fn_name, indices: _indices, }
+                => format!("arguments are ambiguous for function '{}'", idstore.get_string(*fn_name).unwrap()),
+            TypeErrorKind::AmbiguousMethodArguments { method_name, ty, indices: _indices }
+                => format!("arguments are ambiguous for method '{}::{}'", ty.to_string(idstore), idstore.get_string(*method_name).unwrap()),
+            TypeErrorKind::MethodCallOnPrimitive { ty, }
+                => format!("cannot call methods on primitive type '{}'", ty.to_string(idstore)),
+            TypeErrorKind::NoSuchStruct { struct_name, }
+                => format!("there is no struct with the name '{}'", idstore.get_string(*struct_name).unwrap()),
+            TypeErrorKind::IllegalBinaryOperation { op, got, }
+                => format!("binary operator '{}' cannot be performed on type '{}'", op, got.to_string(idstore)),
+            TypeErrorKind::IllegalUnaryOperation { op, got, }
+                => format!("unary operator '{}' cannot be performed on type '{}'", op, got.to_string(idstore)),
+            TypeErrorKind::IdNotFound { name, }
+                => format!("variable with the name '{}' was not found", idstore.get_string(*name).unwrap()),
+            TypeErrorKind::InvalidCast { from, to, }
+                => format!("cannot cast type '{}' to '{}'", from.to_string(idstore), to.to_string(idstore)),
+            TypeErrorKind::NoFunctionDefinition
+                => format!("function body is never defined"),
+            TypeErrorKind::CircularInheritence { with }
+                => format!("circular inheritence with parent class '{}'", with.to_string(idstore)),
+            TypeErrorKind::ParentFieldCollision { field_name, parent_span } => {
+                let (line, col) = Span::new(program, parent_span.start, parent_span.end).unwrap().start_pos().line_col();
+                let (filename, linestart) = lineinfo.get_file_and_line_start(line).unwrap();
+                let line_n_str = (line - linestart).to_string();
+                let indent = " ".repeat(line_n_str.len() + 2);
+                format!("both parent struct and define a field with the name '{}'\n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}= note: Field first defined here", 
+                    idstore.get_string(*field_name).unwrap(), indent, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent)
+            },
+            TypeErrorKind::DuplicateMethodDefinitions { other_span, ty, method_name } => {
+                let (line, col) = Span::new(program, other_span.start, other_span.end).unwrap().start_pos().line_col();
+                let (filename, linestart) = lineinfo.get_file_and_line_start(line).unwrap();
+                let line_n_str = (line - linestart).to_string();
+                let indent = " ".repeat(line_n_str.len() + 2);
+                format!("method '{}::{}' is defined multiple times which have the same args\n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}= note: Method redefined here", 
+                    ty.to_string(idstore), idstore.get_string(*method_name).unwrap(), indent, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent)
+            }
+        }
+    }
 }
 
 pub enum TypeWarningKind {
@@ -55,27 +126,62 @@ pub struct TypeChecker {
     pub wrns: Vec<TypeWarning>,
     // stack
     pub numeric_type_hint: Vec<Ty>,
+    pub expr_span: PosSpan,
 }
 
 impl TypeChecker {
 
-    pub fn new(structs: HashMap<Id, Rc<Structure>>, fns: HashMap<Id, Vec<Rc<Function>>>) -> Self {
+    pub fn typecheck<'a>(ast: Ast<'a>) -> (Result<Ast<'a>, (Vec<TypeError>, IdStore<'a>)>, Vec<TypeWarning>) {
+        let idstore = ast.idstore;
+
+        let fns = ast.functions.clone().into_iter().map(|(_, v)| v).collect::<Vec<_>>();
+        let structs = ast.structs.clone();
+        let mut tc = Self::new(ast.structs, ast.functions);
+
+        for fnlist in fns.into_iter() {
+            for f in fnlist.into_iter() {
+                let mutref = Rc::into_raw(f) as *mut Function;
+
+                tc.visit_function(unsafe { mutref.as_mut().unwrap() });
+
+                let _rc = unsafe { Rc::from_raw(mutref as *const Function) };
+            }
+        }
+
+        for (_, st) in structs.into_iter() {
+            let mutref = Rc::into_raw(st) as *mut Structure;
+            
+            tc.visit_structure(unsafe { mutref.as_mut().unwrap() });
+
+            let _rc = unsafe { Rc::from_raw(mutref as *const Structure) };
+        }
+
+        if tc.errs.len() == 0 {
+            (Ok(Ast { idstore, structs: tc.structs, functions: tc.fns }), tc.wrns)
+        } else {
+            (Err((tc.errs, idstore)), tc.wrns)
+        }
+    }
+
+    fn new(structs: HashMap<Id, Rc<Structure>>, fns: HashMap<Id, Vec<Rc<Function>>>) -> Self {
         TypeChecker {
             structs,
             fns,
             errs: vec![],
             wrns: vec![],
             var_stack: VecDeque::with_capacity(8),
-            numeric_type_hint: vec![Ty::new(TyKind::I64)]
+            numeric_type_hint: vec![Ty::new(TyKind::I64)],
+            expr_span: PosSpan { start: 0, end: 0 }
         }
     }
 
-    fn binary_expr_visit<T>(&mut self, op: &str, span: PosSpan, head: &mut Expr, tail: &mut [(T, Expr)])
-        -> Ty {
+    fn binary_expr_visit<T>(&mut self, head: &mut Expr, tail: &mut [(T, Expr)])
+        -> Ty 
+        where T: Into<&'static str> + Copy + Clone {
         let mut errs = false;
         let mut tys = vec![self.visit_expr(head)];
         self.numeric_type_hint.push(tys[0].clone());
-        for (_op, exp) in tail.iter_mut() {
+        for (op, exp) in tail.iter_mut() {
             let ty = self.visit_expr(exp);
             self.numeric_type_hint.push(ty.clone());
             match ty.kind.clone() {
@@ -83,7 +189,7 @@ impl TypeChecker {
                     errs = true;
                     self.errs.push(
                         TypeError {
-                            err: TypeErrorKind::IllegalBinaryOperation { op: op.to_string(), got: ty.clone() },
+                            err: TypeErrorKind::IllegalBinaryOperation { op: op.clone().into(), got: ty.clone() },
                             span: exp.span.clone(),
                         }
                     );
@@ -93,7 +199,7 @@ impl TypeChecker {
             tys.push(ty);
         }
 
-        for i in 0..tail.len() + 1 {
+        for _ in 0..tail.len() + 1 {
             self.numeric_type_hint.pop();
         }
 
@@ -115,25 +221,24 @@ impl TypeChecker {
         largest_type
     }
 
-}
-
-impl Visitor for TypeChecker {
-
-    fn visit_struct(&mut self, it: &mut Structure) -> Ty {
-        for methods in it.methods.iter_mut() {
-            for f in methods.1.iter_mut() {
-                self.visit_function(f);
-            }
+    pub fn visit_stmt(&mut self, it: &mut Statement) -> Ty {
+        match it {
+            Statement::Body(ref mut body)          => self.visit_body(body.as_mut()),
+            Statement::If(ref mut ifstmt)          => self.visit_if(ifstmt.as_mut()),
+            Statement::While(ref mut whilestmt)    => self.visit_while(whilestmt.as_mut()),
+            Statement::Expr(ref mut expr)          => self.visit_expr(expr),
+            Statement::Jump(ref mut jmpstmt)       => self.visit_jmp(jmpstmt),
+            Statement::Declaration(ref mut decl)   => self.visit_declaration(decl),
         }
-
-        Ty::new(TyKind::Struct(it.name))
     }
-    fn visit_while(&mut self, it: &mut WhileStmt) -> Ty {
+
+
+    pub fn visit_while(&mut self, it: &mut WhileStmt) -> Ty {
         self.visit_stmt(&mut it.body);
         self.visit_expr(&mut it.cond);
         Ty::new(TyKind::I0)
     }
-    fn visit_body(&mut self, it: &mut Body) -> Ty {
+    pub fn visit_body(&mut self, it: &mut Body) -> Ty {
         self.var_stack.push_front(HashMap::new());
         for statement in it.stmts.iter_mut() {
             self.visit_stmt(statement);
@@ -144,7 +249,7 @@ impl Visitor for TypeChecker {
         self.var_stack.pop_front();
         Ty::new(TyKind::I0)
     }
-    fn visit_if(&mut self, it: &mut IfStmt) -> Ty {
+    pub fn visit_if(&mut self, it: &mut IfStmt) -> Ty {
         let cond_ty = self.visit_expr(&mut it.cond);
         self.visit_stmt(&mut it.true_body);
         if let Some(ref mut false_body) = it.false_body.as_mut() {
@@ -161,56 +266,90 @@ impl Visitor for TypeChecker {
         }
         Ty::new(TyKind::I0)
     }
-    fn visit_jmp(&mut self, it: &mut JumpStmt) -> Ty {
+    pub fn visit_jmp(&mut self, it: &mut JumpStmt) -> Ty {
         match it {
             JumpStmt::Break 
             | JumpStmt::Continue 
-            | JumpStmt::Return(None)                => Ty::new(TyKind::I0),
-            JumpStmt::Return(Some(ref mut expr))    => self.visit_expr(expr)  
+            | JumpStmt::Return((None, _))                        => Ty::new(TyKind::I0),
+            JumpStmt::Return((Some(ref mut expr), _span))   => self.visit_expr(expr)  
         }
     }
-    fn visit_declaration(&mut self, it: &mut Declaration) -> Ty {
+    pub fn visit_declaration(&mut self, it: &mut Declaration) -> Ty {
         let expected = it.ty.clone();
         match &expected.kind {
             x @ TyKind::I64 | x @ TyKind::I8 => self.numeric_type_hint.push(Ty::new(x.clone())),
             _ => (),
         };
         let span = it.span.clone();
+        let mut cast = None;
         let res = if let Some(ref mut expr) = it.initializer.as_mut() {
             let got = self.visit_expr(expr);
-            match expected.compatibility_with(&got, self) {
+            match expected.compatibility_with(&got) {
                 TypeCompatibility::Ok => expected.clone(),
                 TypeCompatibility::None => {
                     self.errs.push(TypeError {
-                        err: TypeErrorKind::IncompatibleTypes { got, expected },
+                        err: TypeErrorKind::WrongType { got, expected },
                         span
                     });
                     Ty::new(TyKind::Error)
                 },
                 TypeCompatibility::CastTo(to) => {
-                    self.wrns.push(TypeWarning { 
-                        wrn: TypeWarningKind::ImplicitCast { from: got.clone(), to: to.clone() },
-                        span,
-                    });
-                    **expr = Expr {
-                        expr: ExprKind::Cast(box Cast {
-                            to,
-                            expr: **expr,
-                        }),
-                        span,
-                        ty: None
-                    };
+                    // self.wrns.push(TypeWarning { 
+                        // wrn: TypeWarningKind::ImplicitCast { from: got.clone(), to: to.clone() },
+                        // span,
+                    // });
+                    cast = Some(to);
                     expected.clone()
                 }
             }
         } else {
             Ty::new(TyKind::I0)
         };
+        if it.initializer.is_some() && cast.is_some() {
+            it.initializer = Some(Expr {
+                expr: ExprKind::Cast(box Cast {
+                    to: cast.unwrap(),
+                    expr: it.initializer.take().unwrap(),
+                }),
+                span,
+                ty: None
+            });
+        }
         self.numeric_type_hint.pop();
         res
     }
 
-    fn visit_index(&mut self, it: &mut Index) -> Ty {
+    pub fn visit_expr(&mut self, it: &mut Expr) -> Ty {
+        let span = it.span.clone();
+        self.expr_span = span.clone();
+        let ty = match &mut it.expr {
+            ExprKind::Index(ref mut index)        => self.visit_index(index),
+            ExprKind::Dot(ref mut dot)            => self.visit_dot(dot),
+            ExprKind::Deref(ref mut deref)        => self.visit_deref(deref),
+            ExprKind::Call(ref mut call)          => self.visit_call(call),
+            ExprKind::MethodCall(ref mut mcall)   => self.visit_method_call(mcall),
+            ExprKind::SizeOfExpr(ref mut ty)      => self.visit_sizeofexpr(ty, span),
+            ExprKind::MulExpr(ref mut mulexpr)    => self.visit_mulexpr(mulexpr),
+            ExprKind::AddExpr(ref mut addexpr)    => self.visit_addexpr(addexpr),
+            ExprKind::CmpExpr(ref mut cmpexpr)    => self.visit_cmpexpr(cmpexpr),
+            ExprKind::EqExpr(ref mut eqexpr)      => self.visit_eqexpr(eqexpr),
+            // Bitwise negation
+            ExprKind::InverseExpr(ref mut iexpr)  => self.visit_inverseexpr(iexpr),
+            // boolean negation
+            ExprKind::NotExpr(ref mut expr)       => self.visit_notexpr(expr),
+            ExprKind::AssignExpr(ref mut assignexpr) 
+                                => self.visit_assignexpr(assignexpr),
+            ExprKind::LeaExpr(ref mut expr)       => self.visit_leaexpr(expr),
+            ExprKind::Cast(ref mut cast)          => self.visit_cast(cast),
+            ExprKind::Ident(ref mut id)           => self.visit_ident(id),
+            ExprKind::Number(ref mut n)           => self.visit_number(n),
+            ExprKind::NoOp                        => Ty::new(TyKind::I0),
+        };
+        it.ty = Some(ty.clone());
+        ty
+    }
+
+    pub fn visit_index(&mut self, it: &mut Index) -> Ty {
         let base_ty = self.visit_expr(&mut it.base);
         let index_ty = self.visit_expr(&mut it.offset);
 
@@ -246,13 +385,13 @@ impl Visitor for TypeChecker {
             base_ty.derefed()
         }
     }
-    fn visit_dot(&mut self, it: &mut Dot) -> Ty {
+    pub fn visit_dot(&mut self, it: &mut Dot) -> Ty {
        let lhs_ty = self.visit_expr(&mut it.lhs);
 
         if !lhs_ty.has_field(it.field_name, self) {
             self.errs.push(
                 TypeError {
-                    err: TypeErrorKind::NoSuchField { got: lhs_ty, field: it.field_name },
+                    err: TypeErrorKind::NoSuchField { got: lhs_ty.clone(), field: it.field_name },
                     span: it.lhs.span.clone()
                 }
             );
@@ -273,7 +412,7 @@ impl Visitor for TypeChecker {
             _ => Ty::error(),
         }
     }
-    fn visit_deref(&mut self, it: &mut Expr) -> Ty {
+    pub fn visit_deref(&mut self, it: &mut Expr) -> Ty {
         let ty: Ty = self.visit_expr(it);
         match (ty.ptr, ty.kind.clone()) {
             (0, _) => {
@@ -297,7 +436,7 @@ impl Visitor for TypeChecker {
             _ => ty.derefed(),
         }
     }
-    fn visit_call(&mut self, it: &mut Call) -> Ty {
+    pub fn visit_call(&mut self, it: &mut Call) -> Ty {
         let mut args = vec![];
         for arg in it.args.iter_mut() {
             args.push(self.visit_expr(arg));
@@ -306,7 +445,7 @@ impl Visitor for TypeChecker {
         let mut min_conformity = u64::MAX;
         let mut conforming_indices = Vec::with_capacity(0);
 
-        if let Some(ref fns) = self.fns.get(&it.fn_name).clone() {
+        if let Some(ref fns) = self.fns.get(&it.fn_name).map(|r| (*r).clone()) {
             for i in 0..fns.len() {
                 let conformity = fns[i].conforms_to(&mut it.args[..], self);
                 if conformity > 0 {
@@ -356,8 +495,8 @@ impl Visitor for TypeChecker {
         }
 
     }
-    fn visit_method_call(&mut self, it: &mut MethodCall) -> Ty {
-        let mut lhs_ty = self.visit_expr(&mut it.lhs);
+    pub fn visit_method_call(&mut self, it: &mut MethodCall) -> Ty {
+        let lhs_ty = self.visit_expr(&mut it.lhs);
 
         let mut args = vec![lhs_ty.clone().ptr_to()];
         for arg in it.args.iter_mut() {
@@ -366,10 +505,10 @@ impl Visitor for TypeChecker {
         
         let struct_name = match lhs_ty.kind.clone() {
             TyKind::Struct(id) => id,
-            ty @ _ => {
+            _ => {
                 self.errs.push(
                     TypeError {
-                        err: TypeErrorKind::MethodCallOnPrimitive { ty: lhs_ty },
+                        err: TypeErrorKind::MethodCallOnPrimitive { ty: lhs_ty.clone() },
                         span: it.lhs.span.clone(),
                     }
                 );
@@ -422,6 +561,7 @@ impl Visitor for TypeChecker {
                         err: TypeErrorKind::AmbiguousMethodArguments {
                             method_name: it.method_name, 
                             indices: conforming_indices,
+                            ty: lhs_ty,
                         },
                         span: it.lhs.span.clone(),
                     }
@@ -434,10 +574,10 @@ impl Visitor for TypeChecker {
             },
         }
     }
-    fn visit_sizeofexpr(&mut self, it: &mut Ty, span: PosSpan) -> Ty {
+    pub fn visit_sizeofexpr(&mut self, it: &mut Ty, span: PosSpan) -> Ty {
         match &it.kind {
             TyKind::Struct(name) => 
-                if let Some(s) = self.structs.get(name) {
+                if let Some(_) = self.structs.get(name) {
                     Ty::new(TyKind::I64)
                 } else {
                     self.errs.push(
@@ -451,59 +591,174 @@ impl Visitor for TypeChecker {
             _ => Ty::new(TyKind::I64),
         }
     }
-    fn visit_mulexpr(&mut self, it: &mut MulExpr) -> Ty {
-        self.binary_expr_visit("*", it.span.clone(), &mut it.head, &mut it.tail[..])
+    pub fn visit_mulexpr(&mut self, it: &mut MulExpr) -> Ty {
+        self.binary_expr_visit(&mut it.head, &mut it.tail[..])
     }
-    fn visit_addexpr(&mut self, it: &mut AddExpr) -> Ty {
-        Ty::new(TyKind::I0)
+    pub fn visit_addexpr(&mut self, it: &mut AddExpr) -> Ty {
+        self.binary_expr_visit(&mut it.head, &mut it.tail[..])
     }
-    fn visit_cmpexpr(&mut self, it: &mut CmpExpr) -> Ty{
-        Ty::new(TyKind::I0)
-
+    pub fn visit_cmpexpr(&mut self, it: &mut CmpExpr) -> Ty {
+        self.binary_expr_visit(&mut it.head, &mut it.tail[..])
     }
-    fn visit_eqexpr(&mut self, it: &mut EqExpr) -> Ty {
-        Ty::new(TyKind::I0)
-
+    pub fn visit_eqexpr(&mut self, it: &mut EqExpr) -> Ty {
+        self.binary_expr_visit(&mut it.head, &mut it.tail[..])
     }
-    fn visit_inverseexpr(&mut self, it: &mut Expr) -> Ty {
-        Ty::new(TyKind::I0)
-
+    pub fn visit_inverseexpr(&mut self, it: &mut Expr) -> Ty {
+        let ty = self.visit_expr(it);
+        match (ty.kind.clone(), ty.ptr == 0) {
+            (TyKind::I0, true) | (TyKind::Struct(_), true) => {
+                self.errs.push(TypeError { 
+                    err: TypeErrorKind::IllegalUnaryOperation { op: "~", got: ty.clone() },
+                    span: it.span.clone()    
+                });
+                Ty::error()
+            },
+            _ => ty,
+        }
     }
-    fn visit_notexpr(&mut self, it: &mut Expr) -> Ty {
-        Ty::new(TyKind::I0)
-
+    pub fn visit_notexpr(&mut self, it: &mut Expr) -> Ty {
+        let ty = self.visit_expr(it);
+        match (ty.kind.clone(), ty.ptr == 0) {
+            (TyKind::I64, true) | (TyKind::I8, true) => ty,
+            _ => {
+                self.errs.push(TypeError { err: TypeErrorKind::IllegalUnaryOperation { op: "!", got: ty.clone() }, span: it.span.clone() });
+                Ty::error()
+            },
+        }
     }
-    fn visit_assignexpr(&mut self, it: &mut AssignExpr) -> Ty {
-        Ty::new(TyKind::I0)
-
+    pub fn visit_assignexpr(&mut self, it: &mut AssignExpr) -> Ty {
+        self.binary_expr_visit(&mut it.head, &mut it.tail[..])
     }
-    fn visit_leaexpr(&mut self, it: &mut Expr) -> Ty {
-        Ty::new(TyKind::I0)
-
+    pub fn visit_leaexpr(&mut self, it: &mut Expr) -> Ty {
+        self.visit_expr(it).ptr_to()
     }
-    fn visit_cast(&mut self, it: &mut Cast) -> Ty {
-        Ty::new(TyKind::I0)
-
+    pub fn visit_cast(&mut self, it: &mut Cast) -> Ty {
+        let ty = self.visit_expr(&mut it.expr);
+        match it.to.compatibility_with(&ty) {
+            TypeCompatibility::None => {
+                self.errs.push(TypeError {
+                    err: TypeErrorKind::InvalidCast { from: ty.clone(), to: it.to.clone() },
+                    span: self.expr_span.clone()
+                });
+                Ty::error()
+            },
+            _ => it.to.clone()
+        }
     }
-    fn visit_ident(&mut self, it: &mut Id) -> Ty {
-        Ty::new(TyKind::I0)
-
+    pub fn visit_ident(&mut self, it: &mut Id) -> Ty {
+        for scope in self.var_stack.iter() {
+            if let Some(t) = scope.get(it) { return t.0.clone() }
+        }
+        self.errs.push(TypeError { err: TypeErrorKind::IdNotFound { name: *it }, span: self.expr_span.clone() });
+        Ty::error()
     }
-    fn visit_number(&mut self, it: &mut i64) -> Ty {
+    pub fn visit_number(&mut self, _it: &mut i64) -> Ty {
         self.numeric_type_hint[self.numeric_type_hint.len() - 1].clone()
     }
 
-    fn visit_function(&mut self, it: &mut Function) -> Ty {
-        Ty::new(TyKind::I0)
+    pub fn visit_function(&mut self, it: &mut Function) -> Ty {
+        if it.body.is_none() {
+            self.errs.push(TypeError { err: TypeErrorKind::NoFunctionDefinition, span: it.span.clone() });
+            return Ty::error()
+        }
+        let mut vmap = HashMap::with_capacity(it.arg_order.len());
+        for arg in it.arg_order.iter() {
+            vmap.insert(*arg, (it.args.get(arg).unwrap().ty.clone(), it.span.clone()));
+        }
+        self.var_stack.push_front(vmap);
+        let body = it.body.as_mut().unwrap();
+        for statement in body.stmts.iter_mut() {
+            if let Statement::Declaration(ref mut dec) = statement {
+                self.var_stack[0].insert(dec.name, (dec.ty.clone(), dec.span.clone()));
+            } else if let Statement::Jump(ref mut jmp) = statement {
+                match jmp {
+                    JumpStmt::Break | JumpStmt::Continue => continue,
+                    JumpStmt::Return((Some(ref mut expr), ref pos)) => {
+                        let rt = self.visit_expr(expr);
+                        if rt != it.return_type {
+                            self.errs.push(TypeError {
+                                err: TypeErrorKind::WrongType { got: rt, expected: it.return_type.clone() },
+                                span: pos.clone()
+                            });
+                        }
+                    },
+                    JumpStmt::Return((None, ref pos)) => {
+                        if it.return_type.kind != TyKind::I0 {
+                            self.errs.push(TypeError {
+                                err: TypeErrorKind::WrongType { got: Ty::new(TyKind::I0), expected: it.return_type.clone() },
+                                span: pos.clone()
+                            });
+                        } 
+                    },
+                }
+            }
+            self.visit_stmt(statement);
+        }
+        self.var_stack.pop_front();
+        it.return_type.clone()
+    }
+    pub fn visit_structure(&mut self, it: &mut Structure) -> Ty {
+        if Ty::new(TyKind::Struct(it.name)).has_circular_inheritence(self) {
+            self.errs.push(TypeError {
+                err: TypeErrorKind::CircularInheritence { with: Ty::new(TyKind::Struct(it.parent.clone().unwrap())) },
+                span: it.parent_span.clone().unwrap(),
+            });
+        }
+        if let Some(parent) = it.parent.clone() {
+            if !self.structs.contains_key(&parent) {
+                self.errs.push(TypeError {
+                    err: TypeErrorKind::NoSuchStruct { struct_name: parent },
+                    span: it.parent_span.clone().unwrap()
+                })
+            } 
+        }
 
+        let name = it.name;
+        for (method_name, methods) in it.methods.iter() {
+            for i in 0..methods.len() {
+                for j in 0..methods.len() {
+                    if j == i { break }
+                    if methods.get(i).unwrap().header_equals(methods.get(j).unwrap()) {
+                        self.errs.push(TypeError {
+                            err: TypeErrorKind::DuplicateMethodDefinitions { 
+                                ty: Ty::new(TyKind::Struct(name)),
+                                other_span: methods.get(j).unwrap().span.clone(),
+                                method_name: *method_name,
+                            },
+                            span: methods.get(i).unwrap().span.clone()
+                        });
+                    }
+                }
+            }
+        }
+
+        for (_name, methodlist) in it.methods.iter_mut() {
+            for method in methodlist.iter_mut() {
+                self.visit_function(method);
+            }
+        }
+
+        for (name, struct_field) in it.fields.iter() {
+            if let Some(span) = struct_field.ty.super_has_field(*name, self) {
+                self.errs.push(TypeError {
+                    err: TypeErrorKind::ParentFieldCollision { field_name: *name, parent_span: span },
+                    span: struct_field.span.clone()
+                })
+            }
+        }
+
+        Ty::new(TyKind::Struct(it.name))
     }
-    fn visit_structure(&mut self, it: &mut Structure) -> Ty {
-        Ty::new(TyKind::I0)   
-    }
-    fn visit_ty(&mut self, it: &mut Ty) -> Ty {
-        Ty::new(TyKind::I0)
-    }
-    fn visit_id(&mut self, it: &mut Id) -> Ty {
-        Ty::new(TyKind::I0)
+    pub fn visit_id(&mut self, it: &mut Id) -> Ty {
+        for i in self.var_stack.iter() {
+            if let Some((t, _span)) = i.get(it) {
+                return t.clone()
+            }
+        }
+        self.errs.push(TypeError {
+            err: TypeErrorKind::IdNotFound { name: *it },
+            span: self.expr_span.clone()
+        });
+        Ty::error()
     }
 }

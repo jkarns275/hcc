@@ -1,6 +1,5 @@
 use ast::structure::Structure;
-use pest::iterators::{Pair, Pairs};
-use parser;
+use pest::iterators::*;
 use std::collections::HashMap;
 use ast::context::*;
 
@@ -44,12 +43,13 @@ pub mod declaration;
 use self::ty::Ty;
 use std::rc::Rc;
 use self::id::{Id, IdStore};
-use self::expr::Expr;
 use self::function::Function;
 use super::parser::Rule;
 use pest::Span;
+use self::declaration::*;
+use self::ty::*;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct PosSpan {
     pub start: usize,
     pub end: usize
@@ -64,21 +64,19 @@ impl PosSpan {
 #[derive(Debug)]
 pub struct AstError {
     pub err_msg: String,
-    pub start: usize
+    pub span: PosSpan
 }
 
 impl AstError {
     pub fn new<S: Into<String>>(err_msg: S, span: Span)-> Self {
-        let start = span.start();
-        let err_msg = err_msg.into();
-        AstError { start, err_msg }
+        AstError { span: PosSpan::from_span(span), err_msg: err_msg.into() }
     }
 
     pub fn eof<S: Into<String>>(s: Option<S>) -> Self {
         if let Some(s) = s {
-            AstError { start: 0, err_msg: s.into() }
+            AstError { span: PosSpan { start: 0, end: 0 }, err_msg: s.into() }
         } else {
-            AstError { start: 0, err_msg: "Unexpected end of input.".into() }
+            AstError { span: PosSpan { start: 0, end: 0 }, err_msg: "Unexpected end of input.".into() }
         }
     }
 }
@@ -86,21 +84,19 @@ impl AstError {
 pub struct Ast<'a> {
     pub idstore: IdStore<'a>,
     pub structs: HashMap<Id, Rc<Structure>>,
-    pub functions: HashMap<Id, Function>,
+    pub functions: HashMap<Id, Vec<Rc<Function>>>,
 }
 
 impl<'a> Ast<'a> {
-    fn new<'r>() -> Ast<'r> {
+    fn from_context<'r>(context: Context<'r>) -> Ast<'r> {
         Ast {
-            idstore: IdStore::new(),
-            functions: HashMap::new(),
-            structs: HashMap::new(),
+            idstore: context.idstore,
+            functions: context.functions,
+            structs: context.structs,
         }
     }
 
     pub fn from_pairs(mut pairs: Pairs<'a, Rule>) -> Result<Ast<'a>, Vec<AstError>> {
-        let mut ast = Ast::new();
-
         let program = pairs.next().unwrap();
         let mut context = Context::new();
 
@@ -110,7 +106,7 @@ impl<'a> Ast<'a> {
 
         let mut program = program.into_inner();
 
-        println!("Remember to connect method stubs with method definitions.");
+        let mut methods = vec![];
 
         while let Some(pair) = program.next() {
             match pair.as_rule() {
@@ -126,8 +122,12 @@ impl<'a> Ast<'a> {
                         Ok(s) => s,
                         Err(e) => { println!("{:?}", e); context.errors.push(e); continue }
                     };
-                    let fnlist = context.functions.entry(f.name).or_insert_with(|| vec![]);
-                    fnlist.push(Rc::new(f));
+                    if f.method.is_some() {
+                        methods.push(f);
+                    } else {
+                        let fnlist = context.functions.entry(f.name).or_insert_with(|| vec![]);
+                        fnlist.push(Rc::new(f));
+                    }
                     // TODO: Could do a type / overload check before adding?
                 },
                 Rule::EOI => {},
@@ -136,10 +136,70 @@ impl<'a> Ast<'a> {
                 }
             }
         }
+
+        use std::rc::Rc;
+
+        while let Some(ref mut method) = methods.pop() {
+            let st_name = method.method.clone().unwrap();
+            method.arg_order.insert(0, context.idstore.get_id("this"));
+            method.args.insert(context.idstore.get_id("this"), Declaration {
+                name: context.idstore.get_id("this"),
+                ty: Ty { kind: TyKind::Struct(st_name), ptr: 1 },
+                initializer: None,
+                span: method.span.clone(),
+            });
+
+            if let Some(ref mut st) = Rc::get_mut(context.structs.get_mut(&st_name).unwrap()) {
+                let match_ind = 
+                    if let Some(ref methods) = st.methods.get(&method.name) {
+                        let mut i = 0;
+                        let mut matched = false;
+                        for m in methods.iter() {
+                            if m.header_equals(method) {
+                                if matched {
+                                    context.errors.push(AstError {
+                                        err_msg: format!("Duplicate method definition"),
+                                        span: method.span.clone() 
+                                    })
+                                } else {
+                                    matched = true;
+                                }
+                            }
+                            i += 1;
+                        }
+                        if matched { Some(i) } else { None }
+                    } else {
+                        None
+                    };
+                if let Some(ind) = match_ind {
+                    if let Some(ref mut meth) = st.methods.get_mut(&method.name) {
+                        if meth[ind].body.is_none() {
+                            meth[ind].body = Some(method.body.take().unwrap());
+                        } else {
+                            context.errors.push(AstError {
+                                err_msg: format!("This method already has a definition"),
+                                span: method.span.clone(),
+                            });
+                        }
+                    }
+                } else {
+                    context.errors.push(AstError {
+                        err_msg: format!("This function definition does not match any function header"),
+                        span: method.span.clone(),
+                    });
+                }
+            } else {
+                context.errors.push(AstError {
+                    err_msg: "No such struct.".to_string(),
+                    span: method.span.clone()
+                });
+            }
+        }
+        
         if context.errors.len() != 0 {
             Err(context.errors)
         } else {
-            Ok(ast)
+            Ok(Ast::from_context(context))
         }
     }
 }

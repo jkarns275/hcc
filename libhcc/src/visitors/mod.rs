@@ -42,9 +42,9 @@ pub trait Visitor {
             ExprKind::AddExpr(ref mut addexpr)    => self.visit_addexpr(addexpr),
             ExprKind::CmpExpr(ref mut cmpexpr)    => self.visit_cmpexpr(cmpexpr),
             ExprKind::EqExpr(ref mut eqexpr)      => self.visit_eqexpr(eqexpr),
-            /// Bitwise negation
+            // Bitwise negation
             ExprKind::InverseExpr(ref mut iexpr)  => self.visit_inverseexpr(iexpr),
-            /// boolean negation
+            // boolean negation
             ExprKind::NotExpr(ref mut expr)       => self.visit_notexpr(expr),
             ExprKind::AssignExpr(ref mut assignexpr) 
                                 => self.visit_assignexpr(assignexpr),

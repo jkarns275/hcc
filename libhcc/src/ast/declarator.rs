@@ -1,5 +1,4 @@
 use ast::id::Id;
-use ast::expr::Expr;
 use ast::AstError;
 use ast::context::Context;
 use parser::Rule;
@@ -16,8 +15,7 @@ impl Declarator {
     pub fn struct_declarator_list_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
         -> Result<Vec<Declarator>, AstError> {
         debug_assert!(pair.as_rule() == Rule::struct_declarator_list);
-        let span = pair.as_span();
-        let mut pairs = pair.into_inner();
+        let pairs = pair.into_inner();
         let mut decls = vec![];
         for result in pairs
             .map(|pair| Declarator::struct_declarator_from_pair(pair, context)) {

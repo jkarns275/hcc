@@ -1,15 +1,12 @@
-use pest::iterators::Pairs;
-use pest::error::Error;
-
-use pest::Parser;
-use pest::error::InputLocation;
 use pest::error::ErrorVariant;
+use pest::iterators::Pairs;
+use pest::Parser;
 
 #[derive(Parser)]
 #[grammar = "c.pest"]
 pub struct CParser;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LineInfo {
     /// (min, max, index into filenames)
     pub ranges: Vec<(usize, usize, usize)>,
@@ -36,7 +33,7 @@ impl LineInfo {
 }
 
 pub fn apply_pre_processor(file: &str, working_dir: &str) -> (String, Vec<String>, LineInfo) {
-    use std::process::{Command, Stdio};
+    use std::process::Command;
     let result = String::from_utf8_lossy(
         &Command::new("cpp")
             .arg(file)
@@ -105,19 +102,19 @@ const ERROR_HINTS: &'static [(&'static [Rule], &'static str)] = &[
     "Are you missing a right-paren or missing a complete type specifier?")
 ];
 
-pub fn parse<'r>(src: &'r str, lines: &Vec<String>, line_info: &LineInfo) -> Result<Pairs<'r, Rule>, (String, (usize, usize))> {
+pub fn parse<'r>(src: &'r str) -> Result<Pairs<'r, Rule>, (String, (usize, usize))> {
     match CParser::parse(Rule::program, &src[..]) {
         Ok(pairs) => Ok(pairs),
         Err(e) => {
-            let start_pos = match &e.location {
-                InputLocation::Pos(p) => *p,
-                InputLocation::Span((start, _end)) => *start,
-            };
-            let position = pest::Position::new(&src[..], start_pos).unwrap();
-            let (line, col) = position.line_col();
+            // let start_pos = match &e.location {
+                // InputLocation::Pos(p) => *p,
+                // InputLocation::Span((start, _end)) => *start,
+            // };
+            // let position = pest::Position::new(&src[..], start_pos).unwrap();
+            // let (line, col) = position.line_col();
 
             Err((match &e.variant {
-                ErrorVariant::ParsingError { positives, negatives } => {
+                ErrorVariant::ParsingError { positives, negatives: _s } => {
                     let mut msg = None;
                     for (rules, err_msg) in ERROR_HINTS {
                         if *positives == *rules {

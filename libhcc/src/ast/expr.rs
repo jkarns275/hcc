@@ -8,8 +8,6 @@ use parser::Rule;
 use pest::iterators::Pair;
 use pest::iterators::Pairs;
 
-use visitors::typecheck::*;
-
 macro_rules! arithmetic_expr {
     ( $name:ident, $op_ty_name:ident ) => {
         pub struct $name {
@@ -91,18 +89,27 @@ arithmetic_expr!(AssignExpr, AssignOp, assign_expr, EqExpr, eq_expr);
 //arithmetic_expr!( XorExpr );
 //arithmetic_expr!( OrExpr );
 
+#[derive(Hash, Eq, PartialEq, Copy, Clone)]
 pub enum MulOp {
     Mul,
     Div,
 }
 
+impl Into<&'static str> for MulOp {
+    fn into(self) -> &'static str {
+        match self {
+            MulOp::Mul => "*",
+            MulOp::Div => "/",
+        }
+    }
+}
+
 impl MulOp {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        context: &mut Context<'r>,
+        _context: &mut Context<'r>,
     ) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::mul_operator);
-        let span = pair.as_span();
         Ok(match pair.as_str() {
             "/" => MulOp::Mul,
             "*" => MulOp::Div,
@@ -111,18 +118,27 @@ impl MulOp {
     }
 }
 
+#[derive(Hash, Eq, PartialEq, Copy, Clone)]
 pub enum AddOp {
     Sub,
     Add,
 }
 
+impl Into<&'static str> for AddOp {
+    fn into(self) -> &'static str {
+        match self {
+            AddOp::Add => "+",
+            AddOp::Sub => "-",
+        }
+    }
+}
+
 impl AddOp {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        context: &mut Context<'r>,
+        _context: &mut Context<'r>,
     ) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::add_operator);
-        let span = pair.as_span();
         Ok(match pair.as_str() {
             "+" => AddOp::Add,
             "-" => AddOp::Sub,
@@ -131,6 +147,7 @@ impl AddOp {
     }
 }
 //pub enum ShiftOp { Lsh, Rsh }
+#[derive(Hash, Eq, PartialEq, Copy, Clone)]
 pub enum CmpOp {
     Lt,
     Lte,
@@ -138,13 +155,23 @@ pub enum CmpOp {
     Gte,
 }
 
+impl Into<&'static str> for CmpOp {
+    fn into(self) -> &'static str {
+        match self {
+            CmpOp::Lt => "<",
+            CmpOp::Lte => "<=",
+            CmpOp::Gt => ">",
+            CmpOp::Gte => ">="
+        }
+    }
+}
+
 impl CmpOp {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        context: &mut Context<'r>,
+        _context: &mut Context<'r>,
     ) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::cmp_operator);
-        let span = pair.as_span();
         Ok(match pair.as_str() {
             ">" => CmpOp::Gt,
             ">=" => CmpOp::Gte,
@@ -155,6 +182,7 @@ impl CmpOp {
     }
 }
 
+#[derive(Hash, Eq, PartialEq, Copy, Clone)]
 pub enum AssignOp {
     Eq,
     Mul,
@@ -163,13 +191,37 @@ pub enum AssignOp {
     Sub,
 }
 
+impl Into<&'static str> for AssignOp {
+    fn into(self) -> &'static str {
+        match self {
+            AssignOp::Eq => "=",
+            AssignOp::Mul => "*=",
+            AssignOp::Div => "/=",
+            AssignOp::Add => "+=",
+            AssignOp::Sub => "-=",
+        }
+    }
+}
+
+impl From<&'static str> for AssignOp {
+    fn from(s: &'static str) -> Self {
+        match s {
+            "=" => AssignOp::Eq,
+            "*=" => AssignOp::Mul,
+            "/=" => AssignOp::Div,
+            "+=" => AssignOp::Add,
+            "-=" => AssignOp::Sub,
+            _ => panic!("Invalid AssignOp")
+        }
+    }
+}
+
 impl AssignOp {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        context: &mut Context<'r>,
+        _context: &mut Context<'r>,
     ) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::assign_operator);
-        let span = pair.as_span();
         Ok(match pair.as_str() {
             "=" => AssignOp::Eq,
             "*=" => AssignOp::Mul,
@@ -181,19 +233,37 @@ impl AssignOp {
     }
 }
 
-#[derive(Hash, Eq, PartialEq)]
+#[derive(Hash, Eq, PartialEq, Copy, Clone)]
 pub enum EqOp {
     Eq,
     Neq,
 }
 
+impl Into<&'static str> for EqOp {
+    fn into(self) -> &'static str {
+        match self {
+            EqOp::Eq => "=",
+            EqOp::Neq => "!=",
+        }
+    }
+}
+
+impl From<&'static str> for EqOp {
+    fn from(s: &'static str) -> Self {
+        match s {
+            "==" => EqOp::Eq,
+            "!=" => EqOp::Neq,
+            _ => panic!("Invalid EqOp")
+        }
+    }
+}
+
 impl EqOp {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        context: &mut Context<'r>,
+        _context: &mut Context<'r>,
     ) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::eq_operator);
-        let span = pair.as_span();
         Ok(match pair.as_str() {
             "==" => EqOp::Eq,
             "!=" => EqOp::Neq,
@@ -206,7 +276,7 @@ struct IntLit;
 impl IntLit {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        context: &mut Context<'r>,
+        _context: &mut Context<'r>,
     ) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::int_lit);
         let span = pair.as_span();
@@ -243,7 +313,6 @@ impl PrimaryExpr {
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
         if let Some(next) = pairs.next() {
-            let span = next.as_rule();
             let posspan = PosSpan::from_span(next.as_span());
             Ok(match next.as_rule() {
                 Rule::ident => {
@@ -282,8 +351,7 @@ impl PostfixExpr {
         )?;
         let mut expr = primary_expr;
         while let Some(next) = pairs.next() {
-            let span = next.as_span();
-            let posspan = PosSpan::from_span(next.as_span());
+            let posspan = PosSpan::from_span(span.clone());
             let r = next.as_rule();
             match r {
                 Rule::postfix_index => {
@@ -392,10 +460,9 @@ enum UnaryOp {
 impl UnaryOp {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        context: &mut Context<'r>,
+        _context: &mut Context<'r>,
     ) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::unary_operator);
-        let span = pair.as_span();
         Ok(match pair.as_str() {
             "&" => UnaryOp::Lea,
             "-" => UnaryOp::Negate,

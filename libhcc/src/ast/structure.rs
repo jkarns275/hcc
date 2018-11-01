@@ -1,21 +1,14 @@
 use std::collections::HashMap;
-use std::rc::Rc;
-use ast::id::Id;
-use ast::function::Function;
-use ast::ty::*;
 use pest::iterators::Pair;
 use parser::Rule;
-use ast::id::IdStore;
-use ast::AstError;
-
-#[macro_use]
-use ast;
-use ast::declarator::Declarator;
-use ast::context::Context;
-use pest::Span;
-use pest::Position;
-use ast::PosSpan;
 use ast::declaration::Declaration;
+use ast::declarator::Declarator;
+use ast::function::Function;
+use ast::context::Context;
+use ast::AstError;
+use ast::PosSpan;
+use ast::id::Id;
+use ast::ty::*;
 
 pub struct StructField {
     pub ty: Ty,
@@ -32,7 +25,8 @@ pub struct Structure {
     pub methods: HashMap<Id, Vec<Function>>,
     pub fields: HashMap<Id, StructField>,
     pub parent: Option<Id>,
-    pub name: Id
+    pub name: Id,
+    pub parent_span: Option<PosSpan>,
 }
 
 impl Structure {
@@ -92,19 +86,19 @@ impl Structure {
         let mut pairs = pair.into_inner();
         let _ = expect!(pairs, Rule::struct_kw, "struct keyword", span);
         let name = ident!(pairs, context.idstore, span);
-
-        Ok(if let Some(r) = pairs.next() {
-            let name = ident!(pairs, context.idstore, span);
-            let mut next = pairs.next();
-            let parent = if let Some(next_ref) = next.as_ref() {
-                match next_ref.as_rule() {
-                    Rule::struct_or_union => {
-                        let parent_name = ident!(pairs, context.idstore, span);
+        Ok(if let Some(next) = pairs.next() {
+            let mut parent_span = None;
+            let parent =
+                match next.as_rule() {
+                    Rule::struct_kw => {
+                        let next = pairs.next().unwrap();
+                        parent_span = Some(PosSpan::from_span(next.as_span()));
+                        let parent_name = context.idstore.get_id(next.as_str());
                         Some(parent_name)
                     },
                     _ => None,
-                }
-            } else { panic!("This shouldnt happen. ") };
+                };
+            let mut next = None;
             if parent.is_some() {
                 next = pairs.next();
             }
@@ -115,19 +109,20 @@ impl Structure {
                 for method in method_list.iter_mut() {
                     method.arg_order.insert(0, context.idstore.get_id("this"));
                     method.args.insert(context.idstore.get_id("this"), Declaration {
-                        name: context.idstore.get_id("this"),
+                        name: context.idstore.get_id("this"), 
                         ty: Ty { kind: TyKind::Struct(name), ptr: 1 },
                         initializer: None,
                         span: PosSpan::from_span(span.clone()),
                     });
                 }
             }
-            Structure { methods, fields, parent, name }
+            Structure { methods, fields, parent_span, parent, name }
         } else {
             Structure {
                 methods: HashMap::new(),
                 fields: HashMap::new(),
                 parent: None,
+                parent_span: None,
                 name,
             }
         })

@@ -160,7 +160,7 @@ struct_or_union = _{
     // | union_kw
 }
 struct_or_union_spec = {
-      ( struct_kw ~ ident ~ (colon ~ struct_or_union ~ ident)? ~ lbrace ~ struct_declaration_list ~ rbrace )
+      ( struct_kw ~ ident ~ (colon ~ struct_kw ~ ident)? ~ lbrace ~ struct_declaration_list ~ rbrace )
     | ( struct_kw ~ ident )
 }
 

@@ -1,8 +1,6 @@
-use std::rc::Rc;
-
-use ast::structure::Structure;
 use ast::context::Context;
 use ast::AstError;
+use ast::PosSpan;
 use ast::id::Id;
 
 use visitors::typecheck::*;
@@ -32,7 +30,21 @@ pub struct Ty {
     pub ptr: usize,
 }
 
+use ast::id::IdStore;
+
 impl Ty {
+
+    pub fn to_string(&self, idstore: &IdStore) -> String {
+        let mut t = match self.kind.clone() {
+            TyKind::I0          => "i0".to_string(),
+            TyKind::I8          => "i8".to_string(),
+            TyKind::I64         => "i64".to_string(),
+            TyKind::Struct(id)  => format!("struct {}", idstore.get_string(id).unwrap()),
+            TyKind::Error       => "error".to_string()
+        };
+        for _ in 0..self.ptr { t.push('*') }
+        t
+    }
 
     pub fn new(kind: TyKind) -> Self {
         Ty { kind, ptr: 0 }
@@ -70,12 +82,12 @@ impl Ty {
     }
 
     pub fn conforms_to_mag(&self, other: Ty, tc: &TypeChecker) -> u64 {
-        let mut conformity = 0;
+        let conformity;
         
         match (self.kind.clone(), other.kind.clone()) {
             (TyKind::Error, _) => 1,
             (_, TyKind::Error) => 1,
-            (TyKind::Struct(mut self_name), TyKind::Struct(mut other_name)) => {
+            (TyKind::Struct(mut self_name), TyKind::Struct(other_name)) => {
                 conformity = 1;
                 loop {
                     if self_name == other_name {
@@ -96,7 +108,7 @@ impl Ty {
         }
     }
 
-    pub fn compatibility_with(&self, other: &Ty, tc: &TypeChecker) -> TypeCompatibility {
+    pub fn compatibility_with(&self, other: &Ty) -> TypeCompatibility {
         match (self.ptr == 0, other.ptr == 0) {
             (true, true) => {
                 match (self.kind.clone(), other.kind.clone()) {
@@ -140,7 +152,6 @@ impl Ty {
 
     pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
         -> Result<Ty, AstError> {
-        let span = pair.as_span();
         match pair.as_rule() {
             Rule::type_name => Self::type_name_from_pair(pair, context),
             Rule::type_specifier => Self::type_specifier_from_pair(pair, context),
@@ -198,7 +209,68 @@ impl Ty {
     }
 
     pub fn has_field(&self, name: Id, tc: &TypeChecker) -> bool {
-        panic!()
+        if let TyKind::Struct(st_name) = self.kind.clone() {
+            if let Some(s) = tc.structs.get(&st_name) {
+                if s.fields.contains_key(&name) {
+                    return true
+                }
+            } else { 
+                return false
+            }
+            self.super_has_field(name, tc).is_none()
+        } else {
+            false
+        }
+    }
+
+    pub fn super_has_field(&self, name: Id, tc: &TypeChecker) -> Option<PosSpan> {
+        if let TyKind::Struct(st_name) = self.kind.clone() {
+            let parent;
+            if let Some(s) = tc.structs.get(&st_name) {
+                if let Some(p) = s.parent.as_ref() {
+                    parent = *p;
+                } else {
+                    return None
+                }
+            } else {
+                return None
+            }
+            if let Some(parent) = tc.structs.get(&parent) {
+                if let Some(decl) = parent.fields.get(&name) {
+                    return Some(decl.span.clone())
+                }
+            } else {
+                return None
+            }
+            Ty::new(TyKind::Struct(parent)).super_has_field(name, tc)
+        } else {
+            None
+        }
+    }
+
+    pub fn has_circular_inheritence(&self, tc: &TypeChecker) -> bool {
+        use std::collections::HashSet;
+        if let TyKind::Struct(st_name) = self.kind.clone() {
+            let mut parents = HashSet::<usize>::new();
+            let mut curr = st_name;
+            loop {
+                if let Some(s) = tc.structs.get(&curr) {
+                    if let Some(p) = s.parent.clone() {
+                        parents.insert(curr);
+                        if parents.contains(&p) {
+                            return true
+                        }
+                        curr = p;
+                    } else {
+                        return false
+                    }
+                } else {
+                    return false
+                }
+            }
+        } else {
+            false
+        }
     }
 }
 
