@@ -40,14 +40,11 @@ pub mod function;
 pub mod statement;
 pub mod declaration;
 
-use self::ty::Ty;
 use std::rc::Rc;
 use self::id::{Id, IdStore};
 use self::function::Function;
 use super::parser::Rule;
 use pest::Span;
-use self::declaration::*;
-use self::ty::*;
 
 #[derive(Clone, Copy, Debug)]
 pub struct PosSpan {
@@ -113,14 +110,14 @@ impl<'a> Ast<'a> {
                 Rule::struct_or_union_spec => {
                     let s = match Structure::from_pair(pair, &mut context) {
                         Ok(s) => s,
-                        Err(e) => { println!("{:?}", e); context.errors.push(e); continue }
+                        Err(e) => { context.errors.push(e); continue }
                     };
                     context.structs.insert(s.name, Rc::new(s));
                 },
                 Rule::function_definition => {
                     let f = match Function::from_pair(pair, &mut context) {
                         Ok(s) => s,
-                        Err(e) => { println!("{:?}", e); context.errors.push(e); continue }
+                        Err(e) => { context.errors.push(e); continue }
                     };
                     if f.method.is_some() {
                         methods.push(f);
@@ -141,33 +138,25 @@ impl<'a> Ast<'a> {
 
         while let Some(ref mut method) = methods.pop() {
             let st_name = method.method.clone().unwrap();
-            method.arg_order.insert(0, context.idstore.get_id("this"));
-            method.args.insert(context.idstore.get_id("this"), Declaration {
-                name: context.idstore.get_id("this"),
-                ty: Ty { kind: TyKind::Struct(st_name), ptr: 1 },
-                initializer: None,
-                span: method.span.clone(),
-            });
-
             if let Some(ref mut st) = Rc::get_mut(context.structs.get_mut(&st_name).unwrap()) {
                 let match_ind = 
                     if let Some(ref methods) = st.methods.get(&method.name) {
                         let mut i = 0;
-                        let mut matched = false;
+                        let mut matched = None;
                         for m in methods.iter() {
                             if m.header_equals(method) {
-                                if matched {
+                                if matched.is_some() {
                                     context.errors.push(AstError {
                                         err_msg: format!("Duplicate method definition"),
                                         span: method.span.clone() 
                                     })
                                 } else {
-                                    matched = true;
+                                    matched = Some(i);
                                 }
                             }
                             i += 1;
                         }
-                        if matched { Some(i) } else { None }
+                        matched
                     } else {
                         None
                     };

@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use pest::iterators::Pair;
 use parser::Rule;
-use ast::declaration::Declaration;
 use ast::declarator::Declarator;
 use ast::function::Function;
 use ast::context::Context;
@@ -54,7 +53,7 @@ impl Structure {
         Ok(fields)
     }
 
-    pub fn fields_and_methods_from_pairs<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    pub fn fields_and_methods_from_pairs<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>, name: Id)
         -> Result<(HashMap<Id, StructField>, HashMap<Id, Vec<Function>>), AstError> {
         debug_assert!(pair.as_rule() == Rule::struct_declaration_list);
         let mut pairs = pair.into_inner();
@@ -70,7 +69,8 @@ impl Structure {
                     }
                 },
                 Rule::function_header | Rule::function_definition => {
-                    let function = Function::from_pair(pair, context)?;
+                    let mut function = Function::from_pair(pair, context)?;
+                    function.method  = Some(name);
                     methods.entry(function.name).or_insert_with(|| vec![]).push(function);
                 },
                 _ => {}
@@ -104,18 +104,7 @@ impl Structure {
             }
             let declarations = next.expect("Unexpected end of tokens while parsing struct.");
             let (fields, mut methods)
-                = Structure::fields_and_methods_from_pairs(declarations, context)?;
-            for (_name, method_list) in methods.iter_mut() {
-                for method in method_list.iter_mut() {
-                    method.arg_order.insert(0, context.idstore.get_id("this"));
-                    method.args.insert(context.idstore.get_id("this"), Declaration {
-                        name: context.idstore.get_id("this"), 
-                        ty: Ty { kind: TyKind::Struct(name), ptr: 1 },
-                        initializer: None,
-                        span: PosSpan::from_span(span.clone()),
-                    });
-                }
-            }
+                = Structure::fields_and_methods_from_pairs(declarations, context, name)?;
             Structure { methods, fields, parent_span, parent, name }
         } else {
             Structure {

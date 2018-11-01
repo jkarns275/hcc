@@ -391,6 +391,9 @@ impl PostfixExpr {
                 },
                 Rule::postfix_dot_call | Rule::postfix_deref_call => {
                     let mut pairs = next.into_inner();
+                    if r == Rule::postfix_deref_call {
+                        let _ = pairs.next();
+                    }
                     let id = ident!(pairs, context.idstore, span);
                     let mut expr_list: Pairs<'r, Rule> =
                         expect!(pairs, Rule::argument_expr_list, "argument expr list", span)
@@ -418,6 +421,7 @@ impl PostfixExpr {
                     }
                 },
                 Rule::postfix_dot => {
+                    let mut pairs = next.into_inner();
                     let id = ident!(pairs, context.idstore, span);
                     expr = Expr {
                         span: posspan,
@@ -426,6 +430,9 @@ impl PostfixExpr {
                     };
                 }
                 Rule::postfix_deref => {
+                    let span = next.as_span();
+                    let mut pairs = next.into_inner();
+                    let _ = expect!(pairs, Rule::struct_deref_op, "struct dere op", span);
                     let id = ident!(pairs, context.idstore, span);
                     expr = Expr {
                         span: posspan,

@@ -27,19 +27,20 @@ pub enum TypeErrorKind {
     AmbiguousMethodArguments { method_name: Id, ty: Ty, indices: Vec<(Id, usize)> },
     MethodCallOnPrimitive { ty: Ty, },
     NoSuchStruct { struct_name: Id },
-    IllegalBinaryOperation { op: &'static str, got: Ty, },
+    IllegalBinaryOperation { op: &'static str, got: Ty, other_ty: Ty, },
     IllegalUnaryOperation { op: &'static str, got: Ty, },
     IdNotFound { name: Id, },
     InvalidCast { from: Ty, to: Ty, },
     NoFunctionDefinition,
     ParentFieldCollision { field_name: Id, parent_span: PosSpan },
-    DuplicateMethodDefinitions { other_span: PosSpan, ty: Ty, method_name: Id },
+    DuplicateMethodDefinitions { other_span: PosSpan, ty: Ty, method_name: Id, },
     CircularInheritence { with: Ty }
 }
 
 pub struct TypeError {
     pub err: TypeErrorKind,
     pub span: PosSpan,
+    pub ty: Ty
 }
 
 use parser::LineInfo;
@@ -77,8 +78,10 @@ impl TypeError {
                 => format!("cannot call methods on primitive type '{}'", ty.to_string(idstore)),
             TypeErrorKind::NoSuchStruct { struct_name, }
                 => format!("there is no struct with the name '{}'", idstore.get_string(*struct_name).unwrap()),
-            TypeErrorKind::IllegalBinaryOperation { op, got, }
-                => format!("binary operator '{}' cannot be performed on type '{}'", op, got.to_string(idstore)),
+            TypeErrorKind::IllegalBinaryOperation { op, got, other_ty, } => {
+                format!("binary operation '{}' cannot be performed on type '{}'\nleft hand side type '{}' is incompatible", 
+                op, got.to_string(idstore), other_ty.to_string(idstore))
+            },
             TypeErrorKind::IllegalUnaryOperation { op, got, }
                 => format!("unary operator '{}' cannot be performed on type '{}'", op, got.to_string(idstore)),
             TypeErrorKind::IdNotFound { name, }
@@ -94,7 +97,7 @@ impl TypeError {
                 let (filename, linestart) = lineinfo.get_file_and_line_start(line).unwrap();
                 let line_n_str = (line - linestart).to_string();
                 let indent = " ".repeat(line_n_str.len() + 2);
-                format!("both parent struct and define a field with the name '{}'\n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}= note: Field first defined here", 
+                format!("both parent struct and define a field with the name '{}'\nField first defined here\n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}|", 
                     idstore.get_string(*field_name).unwrap(), indent, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent)
             },
             TypeErrorKind::DuplicateMethodDefinitions { other_span, ty, method_name } => {
@@ -102,7 +105,7 @@ impl TypeError {
                 let (filename, linestart) = lineinfo.get_file_and_line_start(line).unwrap();
                 let line_n_str = (line - linestart).to_string();
                 let indent = " ".repeat(line_n_str.len() + 2);
-                format!("method '{}::{}' is defined multiple times which have the same args\n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}= note: Method redefined here", 
+                format!("method '{}::{}' is defined multiple times which have the same args\nMethod redefined here: \n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}|", 
                     ty.to_string(idstore), idstore.get_string(*method_name).unwrap(), indent, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent)
             }
         }
@@ -127,16 +130,17 @@ pub struct TypeChecker {
     // stack
     pub numeric_type_hint: Vec<Ty>,
     pub expr_span: PosSpan,
+    pub this: Id,
 }
 
 impl TypeChecker {
 
     pub fn typecheck<'a>(ast: Ast<'a>) -> (Result<Ast<'a>, (Vec<TypeError>, IdStore<'a>)>, Vec<TypeWarning>) {
-        let idstore = ast.idstore;
-
+        let mut idstore = ast.idstore;
+        let this = idstore.get_id("this");
         let fns = ast.functions.clone().into_iter().map(|(_, v)| v).collect::<Vec<_>>();
         let structs = ast.structs.clone();
-        let mut tc = Self::new(ast.structs, ast.functions);
+        let mut tc = Self::new(ast.structs, ast.functions, this);
 
         for fnlist in fns.into_iter() {
             for f in fnlist.into_iter() {
@@ -163,9 +167,10 @@ impl TypeChecker {
         }
     }
 
-    fn new(structs: HashMap<Id, Rc<Structure>>, fns: HashMap<Id, Vec<Rc<Function>>>) -> Self {
+    fn new(structs: HashMap<Id, Rc<Structure>>, fns: HashMap<Id, Vec<Rc<Function>>>, this: Id) -> Self {
         TypeChecker {
             structs,
+            this,
             fns,
             errs: vec![],
             wrns: vec![],
@@ -183,20 +188,26 @@ impl TypeChecker {
         self.numeric_type_hint.push(tys[0].clone());
         for (op, exp) in tail.iter_mut() {
             let ty = self.visit_expr(exp);
-            self.numeric_type_hint.push(ty.clone());
-            match ty.kind.clone() {
-                TyKind::Struct(_) | TyKind::I0 => {
+            match (ty.kind.clone(), ty.ptr == 0) {
+                (TyKind::Struct(_), true) | (TyKind::I0, true) => {
                     errs = true;
                     self.errs.push(
                         TypeError {
-                            err: TypeErrorKind::IllegalBinaryOperation { op: op.clone().into(), got: ty.clone() },
+                            err: TypeErrorKind::IllegalBinaryOperation { 
+                                op: op.clone().into(),
+                                got: ty.clone(),
+                                other_ty: tys[tys.len() - 1].clone(), 
+                            },
                             span: exp.span.clone(),
+                            ty: ty.clone(),
                         }
                     );
+                    self.numeric_type_hint.push(Ty::error());
+                    tys.push(Ty::error());
                 },
-                _ => {}
+                (TyKind::I8, true) => { self.numeric_type_hint.push(ty); },
+                _ => { self.numeric_type_hint.push(Ty::new(TyKind::I64)); }
             }
-            tys.push(ty);
         }
 
         for _ in 0..tail.len() + 1 {
@@ -210,10 +221,7 @@ impl TypeChecker {
             if ty.ptr > 0 { largest_type = ty.clone(); continue }
             match ty.kind.clone() {
                 TyKind::Struct(_) | TyKind::I0 => unreachable!(),
-                TyKind::I64 => 
-                    if largest_type.kind == TyKind::I8 {
-                        largest_type = ty.clone();
-                    },
+                TyKind::I64 => { largest_type = ty.clone(); },
                 _ => { },
             }
         }
@@ -256,11 +264,12 @@ impl TypeChecker {
             self.visit_stmt(false_body);
         }
 
-        if !cond_ty.is_integral_type() {
+        if !cond_ty.is_integral_type() && cond_ty.ptr == 0 {
             self.errs.push(
                 TypeError {
-                    err: TypeErrorKind::ExpectedIntegral { got: cond_ty },
+                    err: TypeErrorKind::ExpectedIntegral { got: cond_ty.clone() },
                     span: it.cond.span,
+                    ty: cond_ty.clone(),
                 }
             );
         }
@@ -278,7 +287,7 @@ impl TypeChecker {
         let expected = it.ty.clone();
         match &expected.kind {
             x @ TyKind::I64 | x @ TyKind::I8 => self.numeric_type_hint.push(Ty::new(x.clone())),
-            _ => (),
+            _ => self.numeric_type_hint.push(Ty::new(TyKind::I64)),
         };
         let span = it.span.clone();
         let mut cast = None;
@@ -288,8 +297,9 @@ impl TypeChecker {
                 TypeCompatibility::Ok => expected.clone(),
                 TypeCompatibility::None => {
                     self.errs.push(TypeError {
-                        err: TypeErrorKind::WrongType { got, expected },
-                        span
+                        err: TypeErrorKind::WrongType { got: got.clone(), expected },
+                        span,
+                        ty: got.clone(),
                     });
                     Ty::new(TyKind::Error)
                 },
@@ -360,16 +370,18 @@ impl TypeChecker {
                     TypeError {
                         err: TypeErrorKind::InvalidIndex { got: index_ty.clone(), },
                         span: it.offset.span.clone(),
+                        ty: index_ty.clone()
                     }
                 );
             }
         };
 
-        if base_ty.ptr == 0 {
+        if base_ty.ptr == 0 && base_ty.kind != TyKind::Error {
             self.errs.push(
                 TypeError {
                     err: TypeErrorKind::CannotDeref { got: base_ty.clone() },
                     span: it.base.span,
+                    ty: base_ty.clone()
                 }
             );
             Ty::error()
@@ -378,6 +390,7 @@ impl TypeChecker {
                 TypeError {
                     err: TypeErrorKind::CannotDerefToVoid,
                     span: it.base.span,
+                    ty: base_ty.clone()
                 }
             );
             Ty::error()
@@ -392,7 +405,8 @@ impl TypeChecker {
             self.errs.push(
                 TypeError {
                     err: TypeErrorKind::NoSuchField { got: lhs_ty.clone(), field: it.field_name },
-                    span: it.lhs.span.clone()
+                    span: it.lhs.span.clone(),
+                    ty: lhs_ty.clone(),
                 }
             );
         }
@@ -414,12 +428,14 @@ impl TypeChecker {
     }
     pub fn visit_deref(&mut self, it: &mut Expr) -> Ty {
         let ty: Ty = self.visit_expr(it);
+        if ty.kind == TyKind::Error { return Ty::error() }
         match (ty.ptr, ty.kind.clone()) {
-            (0, _) => {
+            (0, _t) => {
                 self.errs.push(
                     TypeError {
-                        err: TypeErrorKind::CannotDeref { got: ty },
+                        err: TypeErrorKind::CannotDeref { got: ty.clone() },
                         span: it.span.clone(),
+                        ty: ty.clone()
                     }
                 );
                 Ty::error()
@@ -429,6 +445,7 @@ impl TypeChecker {
                     TypeError {
                         err: TypeErrorKind::CannotDerefToVoid,
                         span: it.span.clone(),
+                        ty: ty.clone()
                     }
                 );
                 Ty::error()
@@ -464,6 +481,7 @@ impl TypeChecker {
                         TypeError {
                             err: TypeErrorKind::BadFunctionArgs { fn_name: it.fn_name },
                             span: it.span.clone(),
+                            ty: Ty::new(TyKind::I0),
                         }
                     );
                     Ty::error()
@@ -477,6 +495,7 @@ impl TypeChecker {
                                 indices: conforming_indices
                             },
                             span: it.span.clone(),
+                            ty: Ty::new(TyKind::I0),
                         }
                     );
                     Ty::error()
@@ -489,6 +508,7 @@ impl TypeChecker {
                 TypeError {
                     err: TypeErrorKind::NoSuchFunction { fn_name: it.fn_name },
                     span: it.span.clone(),
+                    ty: Ty::new(TyKind::I0),
                 }
             );
             Ty::error()
@@ -510,6 +530,7 @@ impl TypeChecker {
                     TypeError {
                         err: TypeErrorKind::MethodCallOnPrimitive { ty: lhs_ty.clone() },
                         span: it.lhs.span.clone(),
+                        ty: lhs_ty.clone(),
                     }
                 );
                 return Ty::error()
@@ -533,7 +554,7 @@ impl TypeChecker {
                                 min_conformity = conformity;
                                 conforming_struct = self.structs.get(&struct_name).map(|r| (*r).clone());
                             }
-                            conforming_indices.push((struct_name, i));
+                            conforming_indices.push((it.method_name, i));
                         }
                     }
                 }
@@ -542,7 +563,7 @@ impl TypeChecker {
             depth += 1;
         }
 
-        match conforming_indices.len().cmp(&0) {
+        match conforming_indices.len().cmp(&1) {
             Ordering::Less => {
                 self.errs.push(
                     TypeError {
@@ -551,6 +572,7 @@ impl TypeChecker {
                             method_name: it.method_name,
                         },
                         span: it.lhs.span.clone(),
+                        ty: lhs_ty.clone(),
                     }
                 );
                 Ty::error()
@@ -561,29 +583,31 @@ impl TypeChecker {
                         err: TypeErrorKind::AmbiguousMethodArguments {
                             method_name: it.method_name, 
                             indices: conforming_indices,
-                            ty: lhs_ty,
+                            ty: lhs_ty.clone(),
                         },
                         span: it.lhs.span.clone(),
+                        ty: lhs_ty,
                     }
                 );
                 Ty::error()
             },
             Ordering::Equal => {
-                let (struct_name, index) = conforming_indices[0].clone();
-                conforming_struct.unwrap().methods[&struct_name][index].return_type.clone()
+                let (method_name, index) = conforming_indices[0].clone();
+                conforming_struct.unwrap().methods[&method_name][index].return_type.clone()
             },
         }
     }
     pub fn visit_sizeofexpr(&mut self, it: &mut Ty, span: PosSpan) -> Ty {
-        match &it.kind {
+        match it.kind.clone() {
             TyKind::Struct(name) => 
-                if let Some(_) = self.structs.get(name) {
+                if let Some(_) = self.structs.get(&name) {
                     Ty::new(TyKind::I64)
                 } else {
                     self.errs.push(
                         TypeError {
-                            err: TypeErrorKind::NoSuchStruct { struct_name: *name },
+                            err: TypeErrorKind::NoSuchStruct { struct_name: name },
                             span: span,
+                            ty: it.clone(),
                         }
                     );
                     Ty::error()
@@ -609,7 +633,8 @@ impl TypeChecker {
             (TyKind::I0, true) | (TyKind::Struct(_), true) => {
                 self.errs.push(TypeError { 
                     err: TypeErrorKind::IllegalUnaryOperation { op: "~", got: ty.clone() },
-                    span: it.span.clone()    
+                    span: it.span.clone(),
+                    ty: ty.clone(),
                 });
                 Ty::error()
             },
@@ -621,7 +646,11 @@ impl TypeChecker {
         match (ty.kind.clone(), ty.ptr == 0) {
             (TyKind::I64, true) | (TyKind::I8, true) => ty,
             _ => {
-                self.errs.push(TypeError { err: TypeErrorKind::IllegalUnaryOperation { op: "!", got: ty.clone() }, span: it.span.clone() });
+                self.errs.push(TypeError { 
+                    err: TypeErrorKind::IllegalUnaryOperation { op: "!", got: ty.clone() },
+                    span: it.span.clone(),
+                    ty: ty.clone(),
+                });
                 Ty::error()
             },
         }
@@ -634,11 +663,13 @@ impl TypeChecker {
     }
     pub fn visit_cast(&mut self, it: &mut Cast) -> Ty {
         let ty = self.visit_expr(&mut it.expr);
+        let t2 = ty.clone();
         match it.to.compatibility_with(&ty) {
             TypeCompatibility::None => {
                 self.errs.push(TypeError {
                     err: TypeErrorKind::InvalidCast { from: ty.clone(), to: it.to.clone() },
-                    span: self.expr_span.clone()
+                    span: self.expr_span.clone(),
+                    ty: t2,
                 });
                 Ty::error()
             },
@@ -649,7 +680,11 @@ impl TypeChecker {
         for scope in self.var_stack.iter() {
             if let Some(t) = scope.get(it) { return t.0.clone() }
         }
-        self.errs.push(TypeError { err: TypeErrorKind::IdNotFound { name: *it }, span: self.expr_span.clone() });
+        self.errs.push(TypeError { 
+            err: TypeErrorKind::IdNotFound { name: *it },
+            span: self.expr_span.clone(),
+            ty: Ty::new(TyKind::I0),
+        });
         Ty::error()
     }
     pub fn visit_number(&mut self, _it: &mut i64) -> Ty {
@@ -658,10 +693,22 @@ impl TypeChecker {
 
     pub fn visit_function(&mut self, it: &mut Function) -> Ty {
         if it.body.is_none() {
-            self.errs.push(TypeError { err: TypeErrorKind::NoFunctionDefinition, span: it.span.clone() });
+            self.errs.push(TypeError {
+                err: TypeErrorKind::NoFunctionDefinition,
+                span: it.span.clone(),
+                ty: Ty::new(TyKind::I0),
+            });
             return Ty::error()
         }
+
+        if it.return_type.is_integral_type() {
+            self.numeric_type_hint.push(it.return_type.clone());
+        }
+
         let mut vmap = HashMap::with_capacity(it.arg_order.len());
+        if it.method.is_some() {
+            vmap.insert(self.this, (Ty::new(TyKind::Struct(it.method.clone().unwrap())).ptr_to(), it.span.clone()));
+        }
         for arg in it.arg_order.iter() {
             vmap.insert(*arg, (it.args.get(arg).unwrap().ty.clone(), it.span.clone()));
         }
@@ -675,18 +722,20 @@ impl TypeChecker {
                     JumpStmt::Break | JumpStmt::Continue => continue,
                     JumpStmt::Return((Some(ref mut expr), ref pos)) => {
                         let rt = self.visit_expr(expr);
-                        if rt != it.return_type {
+                        if rt != it.return_type && rt.compatibility_with(&it.return_type) == TypeCompatibility::None {
                             self.errs.push(TypeError {
-                                err: TypeErrorKind::WrongType { got: rt, expected: it.return_type.clone() },
-                                span: pos.clone()
+                                err: TypeErrorKind::WrongType { got: rt.clone(), expected: it.return_type.clone() },
+                                span: pos.clone(),
+                                ty: rt.clone(),
                             });
                         }
                     },
                     JumpStmt::Return((None, ref pos)) => {
-                        if it.return_type.kind != TyKind::I0 {
+                        if it.return_type.kind != TyKind::I0 && it.return_type.kind != TyKind::Error {
                             self.errs.push(TypeError {
                                 err: TypeErrorKind::WrongType { got: Ty::new(TyKind::I0), expected: it.return_type.clone() },
-                                span: pos.clone()
+                                span: pos.clone(),
+                                ty: it.return_type.clone(),
                             });
                         } 
                     },
@@ -702,13 +751,15 @@ impl TypeChecker {
             self.errs.push(TypeError {
                 err: TypeErrorKind::CircularInheritence { with: Ty::new(TyKind::Struct(it.parent.clone().unwrap())) },
                 span: it.parent_span.clone().unwrap(),
+                ty: Ty::new(TyKind::I0),
             });
         }
         if let Some(parent) = it.parent.clone() {
             if !self.structs.contains_key(&parent) {
                 self.errs.push(TypeError {
                     err: TypeErrorKind::NoSuchStruct { struct_name: parent },
-                    span: it.parent_span.clone().unwrap()
+                    span: it.parent_span.clone().unwrap(),
+                    ty: Ty::new(TyKind::I0),
                 })
             } 
         }
@@ -725,7 +776,8 @@ impl TypeChecker {
                                 other_span: methods.get(j).unwrap().span.clone(),
                                 method_name: *method_name,
                             },
-                            span: methods.get(i).unwrap().span.clone()
+                            span: methods.get(i).unwrap().span.clone(),
+                            ty: Ty::new(TyKind::I0),
                         });
                     }
                 }
@@ -742,7 +794,8 @@ impl TypeChecker {
             if let Some(span) = struct_field.ty.super_has_field(*name, self) {
                 self.errs.push(TypeError {
                     err: TypeErrorKind::ParentFieldCollision { field_name: *name, parent_span: span },
-                    span: struct_field.span.clone()
+                    span: struct_field.span.clone(),
+                    ty: struct_field.ty.clone(),
                 })
             }
         }
@@ -757,7 +810,8 @@ impl TypeChecker {
         }
         self.errs.push(TypeError {
             err: TypeErrorKind::IdNotFound { name: *it },
-            span: self.expr_span.clone()
+            span: self.expr_span.clone(),
+            ty: Ty::new(TyKind::I0),
         });
         Ty::error()
     }

@@ -117,10 +117,9 @@ impl Function {
     /// of the match if there is a match. The lower the number, the closer the match. 
     pub fn conforms_to(&self, args: &mut [Expr], tc: &mut TypeChecker)
         -> u64 {
-        if self.arg_order.len() != args.len() {
+        if  self.method.is_none() && self.arg_order.len() != args.len() {
             return 0
         }
-
         let mut conformity = 1;
         for (argid, supplied) in self.arg_order.iter().zip(args.iter_mut()) {
             let arg_dec = self.args.get(argid).unwrap();

@@ -9,13 +9,14 @@ use parser::Rule;
 
 use pest::iterators::Pair;
 
+#[derive(PartialEq, Eq)]
 pub enum TypeCompatibility {
     None,
     CastTo(Ty),
     Ok
 }
 
-#[derive(PartialEq, Eq, Clone, Hash)]
+#[derive(PartialEq, Eq, Clone, Hash, Debug)]
 pub enum TyKind {
     I0,
     I8,
@@ -24,7 +25,7 @@ pub enum TyKind {
     Error,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Ty {
     pub kind: TyKind,
     pub ptr: usize,
@@ -33,6 +34,10 @@ pub struct Ty {
 use ast::id::IdStore;
 
 impl Ty {
+
+    pub fn is_error(&self) -> bool {
+        self.kind == TyKind::Error
+    }
 
     pub fn to_string(&self, idstore: &IdStore) -> String {
         let mut t = match self.kind.clone() {
@@ -217,7 +222,7 @@ impl Ty {
             } else { 
                 return false
             }
-            self.super_has_field(name, tc).is_none()
+            self.super_has_field(name, tc).is_some()
         } else {
             false
         }

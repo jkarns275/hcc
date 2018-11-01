@@ -107,13 +107,12 @@ impl NotiPrinter {
             }
         );
         if lines.len() > 1 {
-            println!("{}|", indent);
             let (fg, bg) = NotiType::Note.as_ansi_colors();
             print!("{}=", indent);
             set_color!(fg, bg);
-            print!("note:");
+            print!(" note: ");
             reset_color!();
-            println!(" {}", lines[1]);
+            println!("{}", lines[1]);
             for i in 2..lines.len() {
                 println!("{}", lines[i]);
             }
@@ -196,6 +195,7 @@ fn main() {
                                 },
                                 (Err((errors, idstore)), _warnings) => {
                                     for error in errors {
+                                        if error.ty.is_error() { continue }
                                         let err_str = error.to_string(&lines[..], &idstore, &line_info, &src[..]);
                                         noti_printer.print_noti(NotiType::Error, error.span, &err_str[..])
                                     }

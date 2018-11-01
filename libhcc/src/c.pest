@@ -84,7 +84,7 @@ primary_expr = { ident | int_lit | (lparen ~ expr ~ rparen) }
 postfix_deref = { struct_deref_op ~ ident }
 postfix_index = { lbrack ~ expr ~ rbrack }
 postfix_call = { lparen ~ argument_expr_list ~ rparen }
-postfix_dot_call = { dot ~ ident ~ lparen ~ argument_expr_list ~ rparen }
+postfix_dot_call = { "." ~ ident ~ lparen ~ argument_expr_list ~ rparen }
 postfix_deref_call = { struct_deref_op ~ ident ~ lparen ~ argument_expr_list ~ rparen }
 postfix_dot = { dot ~ ident }
 
@@ -230,7 +230,7 @@ initializer_list = { initializer ~ ( comma ~ initializer )* }
 
 stmt = {
 //labeled_stmt |
-    compound_stmt | expr_stmt | selection_stmt | iteration_stmt | jump_stmt
+    compound_stmt | jump_stmt | expr_stmt | selection_stmt | iteration_stmt
 }
 //labeled_stmt = {
 //      ( ident ~ colon ~ stmt )
@@ -268,4 +268,4 @@ t1 = { function_definition ~ EOI }
 
 declaration_list = { declaration+ }
 
-program = { SOI ~ WHITESPACE* ~ ( struct_or_union_spec ~ semicolon | function_definition )+ ~ WHITESPACE* ~ EOI }
+program = { SOI ~ WHITESPACE* ~ ( function_definition | ( struct_or_union_spec ~ semicolon ) )+ ~ WHITESPACE* ~ EOI }

@@ -112,7 +112,6 @@ pub fn parse<'r>(src: &'r str) -> Result<Pairs<'r, Rule>, (String, (usize, usize
             // };
             // let position = pest::Position::new(&src[..], start_pos).unwrap();
             // let (line, col) = position.line_col();
-
             Err((match &e.variant {
                 ErrorVariant::ParsingError { positives, negatives: _s } => {
                     let mut msg = None;
@@ -123,14 +122,14 @@ pub fn parse<'r>(src: &'r str) -> Result<Pairs<'r, Rule>, (String, (usize, usize
                         }
                     }
                     match msg {
-                        None => format!("Expected one of: {:?}", positives),
+                        None => format!("Expected one of: {:?}; {:?}", positives, _s),
                         Some(err_msg) => format!("Hint: {}\n  Expected one of: {:?}", err_msg, positives)
                     }
                 },
                 ErrorVariant::CustomError { message } => message.to_string(),
-            }, match e.line_col {
-                LineColLocation::Pos((a, b)) => (a, b),
-                LineColLocation::Span((a, b), _) => (a, b),
+            }, match e.location {
+                InputLocation::Pos(a) => (a, a),
+                InputLocation::Span((a, b)) => (a, b),
             }))
         }
     }
