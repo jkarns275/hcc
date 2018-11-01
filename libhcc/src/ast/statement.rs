@@ -194,7 +194,6 @@ impl JumpStmt {
             Ok(match r.as_rule() {
                 Rule::break_kw => JumpStmt::Break,
                 Rule::return_kw => {
-                    let mut pairs = r.into_inner();
                     if let Some(pair) = pairs.next() {
                         JumpStmt::Return((Some(Expr::from_pair(pair, context)?), PosSpan::from_span(span)))
                     } else {

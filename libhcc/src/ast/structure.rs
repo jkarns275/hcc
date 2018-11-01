@@ -98,7 +98,7 @@ impl Structure {
                     },
                     _ => None,
                 };
-            let mut next = None;
+            let mut next = Some(next);
             if parent.is_some() {
                 next = pairs.next();
             }
