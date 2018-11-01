@@ -1,5 +1,5 @@
 extern crate pest;
-use pest::Span;
+use pest::*;
 
 extern crate libhcc;
 use libhcc::{ast, parser, visitors::typecheck};
