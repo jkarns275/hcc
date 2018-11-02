@@ -29,10 +29,10 @@ impl Function {
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
         let ret_type = expect!(pairs, Rule::declaration_specifiers, "declaration specifiers", span);
-        let return_type = Function::return_type_from_pair(ret_type, context)?;
+        let mut return_type = Function::return_type_from_pair(ret_type, context)?;
         let fn_declarator = expect!(pairs, Rule::function_declarator, "function declarator", span);
-        let (name, method, args, arg_order) = Function::name_and_args_from_pair(fn_declarator, context)?;
-
+        let (name, method, args, arg_order, ptr) = Function::name_and_args_from_pair(fn_declarator, context)?;
+        return_type.ptr = ptr;
         if let Some(body) = pairs.next() {
             let body = Some(Body::from_pair(body, context)?);
             Ok(Function {
@@ -59,11 +59,22 @@ impl Function {
     }
 
     fn name_and_args_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
-        -> Result<(Id, Option<Id>, HashMap<Id, Declaration>, Vec<Id>), AstError> {
+        -> Result<(Id, Option<Id>, HashMap<Id, Declaration>, Vec<Id>, usize), AstError> {
         debug_assert!(pair.as_rule() == Rule::function_declarator);
         let span = pair.as_span();
 
-        let mut pairs = pair.into_inner();
+        let mut ptr = 0;
+        let mut pairs = pair.into_inner().peekable();
+
+        if let Some(ref p) = pairs.peek() {
+            if p.as_rule() == Rule::pointer {
+                ptr = p.as_str().matches('*').count();
+            }
+        }
+        if ptr != 0 {
+            let _ = pairs.next().unwrap();
+        }
+
         let fn_direct_declarator = expect!(pairs, Rule::function_direct_declarator, "function_direct_declarator", span);
 
         let mut pairs = fn_direct_declarator.into_inner();
@@ -95,9 +106,9 @@ impl Function {
                     params.insert(declaration.name, declaration);
                 }
 
-                Ok((name, method, params, order))
+                Ok((name, method, params, order, ptr))
             } else {
-                Ok((name, method, HashMap::new(), vec![]))
+                Ok((name, method, HashMap::new(), vec![], ptr))
             }
         } else {
             Err(AstError::new("Unexpected end of tokens in name_and_args_from_pair", span))

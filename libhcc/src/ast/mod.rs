@@ -184,6 +184,13 @@ impl<'a> Ast<'a> {
                 });
             }
         }
+
+        use parser::*;
+        use pest::Parser;
+        let print = Function::from_pair(CParser::parse(Rule::function_definition, "i0 print(i64 a) {}").unwrap().next().unwrap(), &mut context).unwrap();
+        let malloc = Function::from_pair(CParser::parse(Rule::function_definition, "i0* malloc(i64 nbytes) { return &nbytes; }").unwrap().next().unwrap(), &mut context).unwrap();
+        context.functions.entry(context.idstore.get_id("print")).or_insert_with(|| vec![]).push(Rc::new(print));
+        context.functions.entry(context.idstore.get_id("malloc")).or_insert_with(|| vec![]).push(Rc::new(malloc));
         
         if context.errors.len() != 0 {
             Err(context.errors)
