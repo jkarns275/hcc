@@ -254,12 +254,24 @@ impl Ty {
     }
 
     pub fn inherits(&self, other: &Ty, tc: &TypeChecker) -> bool {
+        if self.ptr != other.ptr { return false }
         match (self.kind.clone(), other.kind.clone()) {
             (TyKind::Struct(self_st), TyKind::Struct(other)) => {
                 if self_st == other {
                     true
                 } else {
-                    true
+                    let mut curr_struct = tc.structs.get(&self_st);
+                    while let Some(curr) = curr_struct.clone() {
+                        if curr.name == other {
+                            return true
+                        }
+                        if let Some(parent) = curr.parent.as_ref() {
+                            curr_struct = tc.structs.get(parent);
+                        } else {
+                            break
+                        }
+                    }
+                    false
                 }
             },
             _ => true

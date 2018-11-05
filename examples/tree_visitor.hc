@@ -4,6 +4,7 @@
 struct Tree {
     struct Tree *l, *r;
     i64 key;
+	i8 a;
 
 	u0 init(i64 v_key);
     i8 compare(i64 num1, i64 num2);
@@ -22,8 +23,15 @@ struct Tree {
 struct Visitor {
     struct Tree *l, *r;
 
+    struct Tree* junk() { return (struct Tree*) 0; }
     i64 visit(struct Tree* n);
 };
+
+struct MyTree : struct Tree {
+    i8 a;
+};
+
+
 
 u0 Tree::init(i64 v_key) {
 	this->key = v_key;
@@ -209,7 +217,8 @@ i64 Visitor::visit(struct Tree* n) {
     }
 
 struct MyVisitor : struct Visitor {
-
+    i64 junk() {
+    }
     i64 visit(struct Tree* n) {
 		if (n->r != 0) {
 	    	this->r = n->r;
@@ -229,6 +238,7 @@ struct MyVisitor : struct Visitor {
 
 i64 main() {
 	struct Tree root;
+	i64 nti;
 	i64 nti;
 	struct MyVisitor v;
 

@@ -35,7 +35,8 @@ pub enum TypeErrorKind {
     ParentFieldCollision { field_name: Id, parent_span: PosSpan },
     DuplicateMethodDefinitions { other_span: PosSpan, ty: Ty, method_name: Id, },
     CircularInheritence { with: Ty },
-    CannotOverloadReturnType { ty: Ty },
+    CannotOverloadReturnType { super_ty: Ty, supplied_ty: Ty },
+    DuplicateFieldDefinition { parent_def_span: PosSpan, ty: Ty, parent_ty: Ty, field_name: Id  },
 }
 
 pub struct TypeError {
@@ -98,7 +99,7 @@ impl TypeError {
                 let (filename, linestart) = lineinfo.get_file_and_line_start(line).unwrap();
                 let line_n_str = (line - linestart).to_string();
                 let indent = " ".repeat(line_n_str.len() + 2);
-                format!("both parent struct and define a field with the name '{}'\nField first defined here\n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}|", 
+                format!("both parent struct and define a field with the name '{}'\nfield first defined here\n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}|", 
                     idstore.get_string(*field_name).unwrap(), indent, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent)
             },
             TypeErrorKind::DuplicateMethodDefinitions { other_span, ty, method_name } => {
@@ -106,11 +107,19 @@ impl TypeError {
                 let (filename, linestart) = lineinfo.get_file_and_line_start(line).unwrap();
                 let line_n_str = (line - linestart).to_string();
                 let indent = " ".repeat(line_n_str.len() + 2);
-                format!("method '{}::{}' is defined multiple times which have the same args\nMethod redefined here: \n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}|", 
+                format!("method '{}::{}(..)' is defined multiple times\nmethod first defined in parent struct here: \n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}|", 
                     ty.to_string(idstore), idstore.get_string(*method_name).unwrap(), indent, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent)
             },
-            TypeErrorKind::CannotOverloadReturnType { ty } => {
-                format!("")
+            TypeErrorKind::CannotOverloadReturnType { super_ty, supplied_ty } =>
+                format!("cannot overload return type (type '{}' does not inherit '{}')",
+                supplied_ty.to_string(idstore), super_ty.to_string(idstore)),
+            TypeErrorKind::DuplicateFieldDefinition { parent_def_span, ty, parent_ty, field_name } => {
+                let (line, col) = Span::new(program, parent_def_span.start, parent_def_span.end).unwrap().start_pos().line_col();
+                let (filename, linestart) = lineinfo.get_file_and_line_start(line).unwrap();
+                let line_n_str = (line - linestart).to_string();
+                let indent = " ".repeat(line_n_str.len() + 2);
+                format!("field '{}::{}' is defined multiple times\nfield first defined in parent '{}' here: \n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}|", 
+                    ty.to_string(idstore), idstore.get_string(*field_name).unwrap(), parent_ty.to_string(idstore), indent, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent)
             },
         }
     }
@@ -255,7 +264,9 @@ impl TypeChecker {
         for statement in it.stmts.iter_mut() {
             self.visit_stmt(statement);
             if let Statement::Declaration(ref mut dec) = statement {
-                self.var_stack[0].insert(dec.name, (dec.ty.clone(), dec.span.clone()));
+                if let Some((_ty, _span)) = self.var_stack[0].insert(dec.name, (dec.ty.clone(), dec.span.clone())) {
+                    // Do something?
+                }
             }
         }
         self.var_stack.pop_front();
@@ -798,29 +809,21 @@ impl TypeChecker {
                                 match method.return_type.kind.clone() {
                                     TyKind::I0 | TyKind::I64 | TyKind::I8 => {
                                         if method.return_type == pmethod.return_type {
-                                            continue
+                                            break
                                         }
                                     },
                                     _ => {
                                         if method.return_type.inherits(&pmethod.return_type, self) {
-                                            continue
+                                            break
                                         }
                                     }
                                 }
-                                
-                            }
-                            loop {
-                                if let Some(pp) = parent.clone().parent.clone() {
-                                    if let Some(pstruct) = self.structs.get(&pp) {
-                                        parent = pstruct.clone();
-                                        continue
-                                    }
-                                } else {
-                                    break
-                                }
                                 self.errs.push(TypeError {
-                                    err: TypeErrorKind::CannotOverloadReturnType { ty: Ty::new(TyKind::Struct(parent.name)) },
-                                    span: PosSpan { start: 0, end: 0 },
+                                    err: TypeErrorKind::CannotOverloadReturnType {
+                                        supplied_ty: method.return_type.clone(),
+                                        super_ty: pmethod.return_type.clone()
+                                    },
+                                    span: method.span.clone(),
                                     ty: Ty::new(TyKind::I0)
                                 });
                                 break
@@ -828,6 +831,22 @@ impl TypeChecker {
                         }
                     }
                 }
+            }
+        }
+
+        let parent = it.parent.clone();
+        for (field_name, field) in it.fields.iter() {
+            if let Some(span) = Ty::new(TyKind::Struct(name)).super_has_field(*field_name, self) {
+                self.errs.push(TypeError {
+                    err: TypeErrorKind::DuplicateFieldDefinition { 
+                        parent_def_span: span,
+                        ty: Ty::new(TyKind::Struct(name)),
+                        parent_ty: Ty::new(TyKind::Struct(parent.clone().unwrap())),
+                        field_name: *field_name,
+                    },
+                    span: field.span.clone(),
+                    ty: Ty::new(TyKind::I0)
+                });
             }
         }
 
