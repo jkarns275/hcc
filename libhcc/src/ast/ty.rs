@@ -253,6 +253,19 @@ impl Ty {
         }
     }
 
+    pub fn inherits(&self, other: &Ty, tc: &TypeChecker) -> bool {
+        match (self.kind.clone(), other.kind.clone()) {
+            (TyKind::Struct(self_st), TyKind::Struct(other)) => {
+                if self_st == other {
+                    true
+                } else {
+                    true
+                }
+            },
+            _ => true
+        }   
+    }
+
     pub fn has_circular_inheritence(&self, tc: &TypeChecker) -> bool {
         use std::collections::HashSet;
         if let TyKind::Struct(st_name) = self.kind.clone() {

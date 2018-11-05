@@ -34,7 +34,8 @@ pub enum TypeErrorKind {
     NoFunctionDefinition,
     ParentFieldCollision { field_name: Id, parent_span: PosSpan },
     DuplicateMethodDefinitions { other_span: PosSpan, ty: Ty, method_name: Id, },
-    CircularInheritence { with: Ty }
+    CircularInheritence { with: Ty },
+    CannotOverloadReturnType { ty: Ty },
 }
 
 pub struct TypeError {
@@ -107,7 +108,10 @@ impl TypeError {
                 let indent = " ".repeat(line_n_str.len() + 2);
                 format!("method '{}::{}' is defined multiple times which have the same args\nMethod redefined here: \n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}|", 
                     ty.to_string(idstore), idstore.get_string(*method_name).unwrap(), indent, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent)
-            }
+            },
+            TypeErrorKind::CannotOverloadReturnType { ty } => {
+                format!("")
+            },
         }
     }
 }
@@ -753,6 +757,7 @@ impl TypeChecker {
                 span: it.parent_span.clone().unwrap(),
                 ty: Ty::new(TyKind::I0),
             });
+            return Ty::error()
         }
         if let Some(parent) = it.parent.clone() {
             if !self.structs.contains_key(&parent) {
@@ -760,15 +765,17 @@ impl TypeChecker {
                     err: TypeErrorKind::NoSuchStruct { struct_name: parent },
                     span: it.parent_span.clone().unwrap(),
                     ty: Ty::new(TyKind::I0),
-                })
+                });
+                return Ty::error()
             } 
         }
 
         let name = it.name;
+        let parent = it.parent.clone();
         for (method_name, methods) in it.methods.iter() {
             for i in 0..methods.len() {
                 for j in 0..methods.len() {
-                    if j == i { break }
+                    if j == i { continue }
                     if methods.get(i).unwrap().header_equals(methods.get(j).unwrap()) {
                         self.errs.push(TypeError {
                             err: TypeErrorKind::DuplicateMethodDefinitions { 
@@ -779,6 +786,46 @@ impl TypeChecker {
                             span: methods.get(i).unwrap().span.clone(),
                             ty: Ty::new(TyKind::I0),
                         });
+                    }
+                }
+            }
+            if let Some(ref parent) = parent.as_ref() {
+                let mut parent = self.structs[parent].clone();
+                for method in methods {
+                    if let Some(parent_methods) = parent.clone().methods.get(method_name) {
+                        for pmethod in parent_methods {
+                            if method.header_equals(pmethod) {
+                                match method.return_type.kind.clone() {
+                                    TyKind::I0 | TyKind::I64 | TyKind::I8 => {
+                                        if method.return_type == pmethod.return_type {
+                                            continue
+                                        }
+                                    },
+                                    _ => {
+                                        if method.return_type.inherits(&pmethod.return_type, self) {
+                                            continue
+                                        }
+                                    }
+                                }
+                                
+                            }
+                            loop {
+                                if let Some(pp) = parent.clone().parent.clone() {
+                                    if let Some(pstruct) = self.structs.get(&pp) {
+                                        parent = pstruct.clone();
+                                        continue
+                                    }
+                                } else {
+                                    break
+                                }
+                                self.errs.push(TypeError {
+                                    err: TypeErrorKind::CannotOverloadReturnType { ty: Ty::new(TyKind::Struct(parent.name)) },
+                                    span: PosSpan { start: 0, end: 0 },
+                                    ty: Ty::new(TyKind::I0)
+                                });
+                                break
+                            }
+                        }
                     }
                 }
             }
