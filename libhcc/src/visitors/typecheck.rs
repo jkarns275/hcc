@@ -37,6 +37,8 @@ pub enum TypeErrorKind {
     CircularInheritence { with: Ty },
     CannotOverloadReturnType { super_ty: Ty, supplied_ty: Ty },
     DuplicateFieldDefinition { parent_def_span: PosSpan, ty: Ty, parent_ty: Ty, field_name: Id  },
+    DuplicateStructDefinitions { other_span: PosSpan, name: Id },
+    IncompleteType { field_name: Id }
 }
 
 pub struct TypeError {
@@ -121,6 +123,23 @@ impl TypeError {
                 format!("field '{}::{}' is defined multiple times\nfield first defined in parent '{}' here: \n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}|", 
                     ty.to_string(idstore), idstore.get_string(*field_name).unwrap(), parent_ty.to_string(idstore), indent, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent)
             },
+            TypeErrorKind::DuplicateStructDefinitions { other_span, name } => {
+                let (line, col) = Span::new(program, other_span.start, other_span.end).unwrap().start_pos().line_col();
+                let (filename, linestart) = lineinfo.get_file_and_line_start(line).unwrap();
+                let line_n_str = (line - linestart).to_string();
+                let indent = " ".repeat(line_n_str.len() + 2);
+                format!("struct '{}' is defined multiple times\n struct first defined here: \n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}|", 
+                    idstore.get_string(*name).unwrap(), indent, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent);
+            },
+            TypeErrorKind::IncompleteType { field_name } => {
+                let (line, col) = Span::new(program, self.span.start, self.span.end).unwrap().start_pos().line_col();
+                let (filename, linestart) = lineinfo.get_file_and_line_start(line).unwrap();
+                let line_n_str = (line - linestart).to_string();
+                let indent = " ".repeat(line_n_str.len() + 2);
+                format!("field '{}' has an incomplete type\nfield defined here: \n{}---> {}:{}:{}\n{}|\n{} |  {}\n{}|",
+                    idstore.get_string(*field_name).unwrap(), ident, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent);
+                );
+            }
         }
     }
 }
@@ -515,7 +534,10 @@ impl TypeChecker {
                     );
                     Ty::error()
                 },
-                Ordering::Equal => fns[0].return_type.clone(),
+                Ordering::Equal => {
+                    it.f = Some(conforming_indices[0]);
+                    fns[conforming_indices[0]].return_type.clone()
+                }
             }
         } else {
             // fn not found
@@ -608,6 +630,7 @@ impl TypeChecker {
             },
             Ordering::Equal => {
                 let (method_name, index) = conforming_indices[0].clone();
+                it.f = Some((Ty::new(TyKind::Struct(struct_name)), index));
                 conforming_struct.unwrap().methods[&method_name][index].return_type.clone()
             },
         }
@@ -770,15 +793,17 @@ impl TypeChecker {
             });
             return Ty::error()
         }
-        if let Some(parent) = it.parent.clone() {
-            if !self.structs.contains_key(&parent) {
+
+        if let Some(s) = self.structs.remove(&it.name) {
+            if s.empty {
+                it.merge(s);
+            } else {
                 self.errs.push(TypeError {
-                    err: TypeErrorKind::NoSuchStruct { struct_name: parent },
-                    span: it.parent_span.clone().unwrap(),
-                    ty: Ty::new(TyKind::I0),
-                });
-                return Ty::error()
-            } 
+                    err: TypeErrorKind::DuplicateStructDefinitions { other_span: s.span, name: it.name },
+                    span: it.span,
+                    ty: Ty::new(TyKind::I0)
+                })
+            }
         }
 
         let name = it.name;
@@ -836,6 +861,14 @@ impl TypeChecker {
 
         let parent = it.parent.clone();
         for (field_name, field) in it.fields.iter() {
+            if let TyKind::Struct(name) = field.ty.kind {
+                if !self.structs.contains_key() {
+                    self.errs.push(TypeError {
+                        errs: TypeErrorKind::IncompleteType { field_name: *field_name }
+                    });
+                    return Ty::error()
+                }
+            }
             if let Some(span) = Ty::new(TyKind::Struct(name)).super_has_field(*field_name, self) {
                 self.errs.push(TypeError {
                     err: TypeErrorKind::DuplicateFieldDefinition { 

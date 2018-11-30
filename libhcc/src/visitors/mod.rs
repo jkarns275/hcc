@@ -7,6 +7,7 @@ use ast::function::*;
 use ast::ty::*;
 use ast::*;
 
+pub mod codegen;
 pub mod typecheck;
 
 pub trait Visitor {

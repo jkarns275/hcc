@@ -4,6 +4,7 @@ use ast::ty::Ty;
 use ast::AstError;
 use ast::PosSpan;
 use parser::Rule;
+use ast::function::Function;
 
 use pest::iterators::Pair;
 use pest::iterators::Pairs;
@@ -381,6 +382,7 @@ impl PostfixExpr {
                             expr: ExprKind::Call(box Call {
                                 fn_name: id,
                                 args,
+                                f: None,
                                 span: posspan
                             }),
                             ty: None,
@@ -416,6 +418,7 @@ impl PostfixExpr {
                             lhs: expr,
                             method_name: id,
                             args,
+                            f: None,
                         }),
                         ty: None,
                     }
@@ -642,12 +645,14 @@ pub struct Call {
     pub fn_name: Id,
     pub span: PosSpan,
     pub args: Vec<Expr>,
+    pub f: Option<usize>,
 }
 
 pub struct MethodCall {
     pub method_name: Id,
     pub args: Vec<Expr>, 
-    pub lhs: Expr
+    pub lhs: Expr,
+    pub f: Option<(Ty, usize)>,
 }
 
 pub struct Cast {

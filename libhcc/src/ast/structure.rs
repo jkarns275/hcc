@@ -8,6 +8,7 @@ use ast::AstError;
 use ast::PosSpan;
 use ast::id::Id;
 use ast::ty::*;
+use std::rc::Rc;
 
 pub struct StructField {
     pub ty: Ty,
@@ -25,7 +26,10 @@ pub struct Structure {
     pub fields: HashMap<Id, StructField>,
     pub parent: Option<Id>,
     pub name: Id,
+    pub span: PosSpan,
     pub parent_span: Option<PosSpan>,
+    pub children: Vec<Id>,
+    pub empty: bool
 }
 
 impl Structure {
@@ -105,16 +109,27 @@ impl Structure {
             let declarations = next.expect("Unexpected end of tokens while parsing struct.");
             let (fields, mut methods)
                 = Structure::fields_and_methods_from_pairs(declarations, context, name)?;
-            Structure { methods, fields, parent_span, parent, name }
+            Structure {
+                methods, fields, parent_span, parent,
+                span: PosSpan::from_span(span), empty: false, name, children: vec![]
+            }
         } else {
             Structure {
                 methods: HashMap::new(),
                 fields: HashMap::new(),
                 parent: None,
                 parent_span: None,
+                span: PosSpan::from_span(span),
                 name,
+                empty: true,
+                children: vec![],
             }
         })
+    }
+
+    pub fn merge(&mut self, other: Rc<Structure>) {
+        assert!(other.empty);
+        self.children.append(&mut other.children.clone());
     }
 }
 
