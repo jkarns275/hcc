@@ -36,7 +36,7 @@ pub struct CG<'a> {
     pub fns: HashMap<Id, Vec<Rc<Function>>>,
     pub structs: HashMap<Id, Rc<Structure>>,
     pub vtables: HashMap<Id, Vec<Rc<Structure>>>,
-    pub varstacks: HashMap<Id, Vec<Id>>,
+    pub varstacks: Vec<HashMap<Id, Id>>,
     pub parents: HashMap<Id, Rc<Structure>>,
     pub current_ty: Ty,
     pub roots: HashMap<Id, Id>,
@@ -315,7 +315,7 @@ impl<'a> CG<'a> {
     }
     fn visit_mulexpr(&mut self, it: &mut MulExpr) -> Id {
         let result = self.next_tmp();
-        let mut terms = it.tail().iter_mut(|x| (self.visit_expr(&mut x.1), x.0.clone())).collect::<Vec<_>>();
+        let mut terms = it.tail.iter_mut(|x| (self.visit_expr(&mut x.1), x.0.clone())).collect::<Vec<_>>();
         let mut exp = "".to_owned();
 
         let first = self.visit_expr(&mut it.head);
@@ -332,7 +332,7 @@ impl<'a> CG<'a> {
     }
     fn visit_addexpr(&mut self, it: &mut AddExpr) -> Id {
         let result = self.next_tmp();
-        let mut terms = it.tail().iter_mut(|x| (self.visit_expr(&mut x.1), x.0.clone())).collect::<Vec<_>>();
+        let mut terms = it.tail.iter_mut(|x| (self.visit_expr(&mut x.1), x.0.clone())).collect::<Vec<_>>();
         let mut exp = "".to_owned();
 
         let first = self.visit_expr(&mut it.head);
@@ -349,7 +349,7 @@ impl<'a> CG<'a> {
     }
     fn visit_cmpexpr(&mut self, it: &mut CmpExpr) -> Id {
         let result = self.next_tmp();
-        let mut terms = it.tail().iter_mut(|x| (self.visit_expr(&mut x.1), x.0.clone())).collect::<Vec<_>>();
+        let mut terms = it.tail.iter_mut(|x| (self.visit_expr(&mut x.1), x.0.clone())).collect::<Vec<_>>();
         let mut exp = "".to_owned();
 
         let first = self.visit_expr(&mut it.head);
@@ -366,7 +366,7 @@ impl<'a> CG<'a> {
     }
     fn visit_eqexpr(&mut self, it: &mut EqExpr) -> Id {
         let result = self.next_tmp();
-        let mut terms = it.tail().iter_mut(|x| (self.visit_expr(&mut x.1), x.0.clone())).collect::<Vec<_>>();
+        let mut terms = it.tail.iter_mut(|x| (self.visit_expr(&mut x.1), x.0.clone())).collect::<Vec<_>>();
         let mut exp = "".to_owned();
 
         let first = self.visit_expr(&mut it.head);
@@ -395,8 +395,25 @@ impl<'a> CG<'a> {
     }
     fn visit_assignexpr(&mut self, it: &mut AssignExpr) -> Id {
         let result = self.next_tmp();
-        let operand = self.visit_expr(it);
-        self.emit(format!("    {} {} = !{};\n", self.current_ty.to_code(), self.ids(result), self.ids.operand()));
+        
+        let mut prev: Option<(AssignOp, Id)> = None;
+        for (op, exp) in it.tail[0..it.tail.len() - 1].iter_mut() {
+            match exp.kind {
+                ExprKind::Dot(ref mut exp) => {
+                    let lhs = self.visit_expr(&mut exp.lhs);
+                    let current_result = ?
+                    if let Some((assign_op, prev_result)) = prev.clone() {
+                        self.emit(format!("{}.{} = {};\n", self.ids.get_str(lhs), self.ids.get_str(exp.field_name), self.ids.get_str(prev_result)));
+                    } else {
+                        
+                    }
+                    prev = Some((op, cur_result));
+                },
+                ExprKind::Index(ref mut exp) => {},
+                ExprKind::Deref(ref mut exp) => {},
+                ExprKind::Ident(ref mut id) => {},
+            }
+        }
         result
     }
     fn visit_leaexpr(&mut self, it: &mut Expr) -> Id { Label(0) }
