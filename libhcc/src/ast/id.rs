@@ -3,32 +3,37 @@ use std::collections::HashMap;
 pub type Id = usize;
 
 #[derive(Clone)]
-pub struct IdStore<'a> {
-    ids: Vec<&'a str>,
-    map: HashMap<&'a str, usize>,
+pub struct IdStore {
+    ids: Vec<String>,
+    map: HashMap<String, usize>,
 }
 
-impl<'a> IdStore<'a> {
-    pub fn new<'r>() -> IdStore<'r> {
+impl IdStore {
+    pub fn new() -> IdStore {
         IdStore {
             ids: vec![],
             map: HashMap::new(),
         }
     }
 
-    pub fn get_id(&mut self, s: &'a str) -> Id {
-        if self.map.contains_key(s) {
+    pub fn get_id<S: Into<Sting>>(&mut self, s: S) -> Id {
+        let s = s.into();
+        if self.map.contains_key(&s) {
             let id = self.map[s];
             id
         } else {
             let id = self.ids.len();
-            self.ids.push(s);
+            self.ids.push(s.clone());
             self.map.insert(s, id);
             id
         }
     }
 
     pub fn get_string(&self, id: Id) -> Option<String> {
-        self.ids.get(id).map(|s| s.to_string())
+        self.ids.get(id).map(|s| s.clone())
+    }
+
+    pub fn get_str<'b>(&'b self, id: Id) -> &'b str {
+        &self.ids[id][..]
     }
 }

@@ -29,7 +29,8 @@ pub struct Structure {
     pub span: PosSpan,
     pub parent_span: Option<PosSpan>,
     pub children: Vec<Id>,
-    pub empty: bool
+    pub empty: bool,
+    pub type_id: i8,
 }
 
 impl Structure {
@@ -111,7 +112,7 @@ impl Structure {
                 = Structure::fields_and_methods_from_pairs(declarations, context, name)?;
             Structure {
                 methods, fields, parent_span, parent,
-                span: PosSpan::from_span(span), empty: false, name, children: vec![]
+                span: PosSpan::from_span(span), empty: false, name, children: vec![], type_id: -1,
             }
         } else {
             Structure {
@@ -123,6 +124,7 @@ impl Structure {
                 name,
                 empty: true,
                 children: vec![],
+                type_id: -1,
             }
         })
     }
@@ -130,6 +132,7 @@ impl Structure {
     pub fn merge(&mut self, other: Rc<Structure>) {
         assert!(other.empty);
         self.children.append(&mut other.children.clone());
+        self.empty = false;
     }
 }
 

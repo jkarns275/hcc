@@ -39,13 +39,25 @@ impl Ty {
         self.kind == TyKind::Error
     }
 
+    pub fn to_code(&self, idstore: &IdStore) -> String {
+        let mut t = match self.kind.clone() {
+            TyKind::I0          => "i0".to_string(),
+            TyKind::I8          => "i8".to_string(),
+            TyKind::I64         => "i64".to_string(),
+            TyKind::Struct(id)  => format!("struct _{}", idstore.get_string(id).unwrap()),
+            TyKind::Error       => panic!("Attempted to generate code for error type")
+        };
+        for _ in 0..self.ptr { t.push('*') }
+        t
+    }
+
     pub fn to_string(&self, idstore: &IdStore) -> String {
         let mut t = match self.kind.clone() {
             TyKind::I0          => "i0".to_string(),
             TyKind::I8          => "i8".to_string(),
             TyKind::I64         => "i64".to_string(),
             TyKind::Struct(id)  => format!("struct {}", idstore.get_string(id).unwrap()),
-            TyKind::Error       => "error".to_string()
+            TyKind::Error       => "<error>".to_string()
         };
         for _ in 0..self.ptr { t.push('*') }
         t
@@ -217,12 +229,13 @@ impl Ty {
         if let TyKind::Struct(st_name) = self.kind.clone() {
             if let Some(s) = tc.structs.get(&st_name) {
                 if s.fields.contains_key(&name) {
-                    return true
+                    true
+                } else {
+                    false // self.super_has_field(name, tc).is_some()
                 }
             } else { 
-                return false
+                false
             }
-            self.super_has_field(name, tc).is_some()
         } else {
             false
         }

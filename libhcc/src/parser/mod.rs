@@ -3,7 +3,7 @@ use pest::iterators::Pairs;
 use pest::Parser;
 
 #[derive(Parser)]
-#[grammar = "c.pest"]
+#[grammar = "hc.pest"]
 pub struct CParser;
 
 #[derive(Debug, Clone)]

@@ -38,7 +38,9 @@ pub enum TypeErrorKind {
     CannotOverloadReturnType { super_ty: Ty, supplied_ty: Ty },
     DuplicateFieldDefinition { parent_def_span: PosSpan, ty: Ty, parent_ty: Ty, field_name: Id  },
     DuplicateStructDefinitions { other_span: PosSpan, name: Id },
-    IncompleteType { field_name: Id }
+    IncompleteType { field_name: Id },
+    NewZeroSizeType,
+
 }
 
 pub struct TypeError {
@@ -129,16 +131,14 @@ impl TypeError {
                 let line_n_str = (line - linestart).to_string();
                 let indent = " ".repeat(line_n_str.len() + 2);
                 format!("struct '{}' is defined multiple times\n struct first defined here: \n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}|", 
-                    idstore.get_string(*name).unwrap(), indent, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent);
+                    idstore.get_string(*name).unwrap(), indent, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent)
             },
             TypeErrorKind::IncompleteType { field_name } => {
-                let (line, col) = Span::new(program, self.span.start, self.span.end).unwrap().start_pos().line_col();
-                let (filename, linestart) = lineinfo.get_file_and_line_start(line).unwrap();
-                let line_n_str = (line - linestart).to_string();
-                let indent = " ".repeat(line_n_str.len() + 2);
-                format!("field '{}' has an incomplete type\nfield defined here: \n{}---> {}:{}:{}\n{}|\n{} |  {}\n{}|",
-                    idstore.get_string(*field_name).unwrap(), ident, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent);
-                );
+                format!("field '{}' has an incomplete type\n",
+                    idstore.get_string(*field_name).unwrap())
+            },
+            TypeErrorKind::NewZeroSizeType => {
+                format!("cannot allocate a zero sized type")
             }
         }
     }
@@ -321,6 +321,23 @@ impl TypeChecker {
         let expected = it.ty.clone();
         match &expected.kind {
             x @ TyKind::I64 | x @ TyKind::I8 => self.numeric_type_hint.push(Ty::new(x.clone())),
+            TyKind::Struct(name) => {
+                if let Some(s) = self.structs.get(&name) {
+                    if s.empty {
+                        self.errs.push(TypeError {
+                            err: TypeErrorKind::IncompleteType { field_name: *field_name },
+                            span: field.span.clone(),
+                            ty: field.ty.clone()
+                        });
+                    }
+                } else {
+                    self.errs.push(TypeError {
+                        err: TypeErrorKind::NoSuchStruct { struct_name: name },
+                        span: field.span.clone(),
+                        ty: field.ty.clone()
+                    });
+                }
+            },
             _ => self.numeric_type_hint.push(Ty::new(TyKind::I64)),
         };
         let span = it.span.clone();
@@ -387,6 +404,7 @@ impl TypeChecker {
             ExprKind::Cast(ref mut cast)          => self.visit_cast(cast),
             ExprKind::Ident(ref mut id)           => self.visit_ident(id),
             ExprKind::Number(ref mut n)           => self.visit_number(n),
+            ExprKind::New(ref mut ty)             => self.visit_new(ty),
             ExprKind::NoOp                        => Ty::new(TyKind::I0),
         };
         it.ty = Some(ty.clone());
@@ -630,7 +648,7 @@ impl TypeChecker {
             },
             Ordering::Equal => {
                 let (method_name, index) = conforming_indices[0].clone();
-                it.f = Some((Ty::new(TyKind::Struct(struct_name)), index));
+                it.f = Some((Ty::new(TyKind::Struct(conforming_struct)), index));
                 conforming_struct.unwrap().methods[&method_name][index].return_type.clone()
             },
         }
@@ -727,6 +745,20 @@ impl TypeChecker {
     }
     pub fn visit_number(&mut self, _it: &mut i64) -> Ty {
         self.numeric_type_hint[self.numeric_type_hint.len() - 1].clone()
+    }
+
+    pub fn visit_new(&mut self, it: &mut Ty) -> Ty {
+        match it.clone().kind {
+            TyKind::I0 => {
+                self.errs.push(TypeError {
+                    err: TypeErrorKind::NewZeroSizeType,
+                    span: self.expr_span.clone(),
+                    ty: it.clone(),
+                });
+                Ty::error()
+            },
+            _ => it.clone().ptr_to(),
+        }
     }
 
     pub fn visit_function(&mut self, it: &mut Function) -> Ty {
@@ -862,9 +894,11 @@ impl TypeChecker {
         let parent = it.parent.clone();
         for (field_name, field) in it.fields.iter() {
             if let TyKind::Struct(name) = field.ty.kind {
-                if !self.structs.contains_key() {
+                if !self.structs.contains_key(&name) {
                     self.errs.push(TypeError {
-                        errs: TypeErrorKind::IncompleteType { field_name: *field_name }
+                        err: TypeErrorKind::IncompleteType { field_name: *field_name },
+                        span: field.span.clone(),
+                        ty: field.ty.clone()
                     });
                     return Ty::error()
                 }

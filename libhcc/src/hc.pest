@@ -1,0 +1,272 @@
+WHITESPACE = _{ " " | "\n" | "\r" | "\t" }
+
+lparen = _{ "(" }
+rparen = _{ ")" }
+lbrace = _{ "{" }
+rbrace = _{ "}" }
+lbrack = _{ "[" }
+rbrack = _{ "]" }
+colon = _{ ":" }
+semicolon = _{ ";" }
+comma = _{ "," }
+dot = _{ "." }
+and = _{ "&" }
+or = _{ "|" }
+xor = _{ "^" }
+add = _{ "+" }
+sub = _{ "-" }
+mul = _{ "*" }
+div = _{ "/" }
+modulus = _{ "%" }
+not = { "!" }
+eq = _{ "=" }
+gt = { ">" }
+lt = { "<" }
+gte = { ">=" }
+lte = { "<=" }
+equals = { "==" }
+neq = { "!=" }
+lsh = { "<<" }
+rsh = { ">>" }
+struct_deref_op = { "->" }
+
+sizeof_kw = { "sizeof" }
+break_kw = { "break" }
+true_kw = { "true" }
+false_kw = { "false" }
+typedef_kw = { "typedef" }
+extern_kw = { "extern" }
+static_kw = { "static" }
+auto_kw = { "auto" }
+register_kw = { "register" }
+void_kw = { "void" | "u0" | "i0" }
+int_type = { // "u8" |
+    //"u16" | "u32" |
+    "i64" | "i8"
+    //"i16" | "i32" |
+    // "i64"
+}
+union_kw = { "union" }
+struct_kw = { "struct" }
+enum_kw = { "enum" }
+const_kw = { "const" }
+volatile_kw = { "volatile" }
+case_kw = { "case" }
+default_kw = { "default" }
+if_kw = _{ "if" }
+else_kw = _{ "else" }
+return_kw = { "return" }
+continue_kw = { "continue" }
+switch_kw = { "switch" }
+goto_kw = { "goto" }
+while_kw = { "while" }
+for_kw = { "for" }
+new_kw = { "new" }
+
+
+bin_digit = ${ ("0" | "1") }
+dec_digit = ${ ('0'..'9') }
+hex_digit = ${ ('0'..'9' | 'a'..'f' | 'A'..'F') }
+
+bin_prefix = _{ "0b" | "0B" }
+bin_lit = ${ bin_prefix ~ bin_digit+ }
+hex_prefix = _{ "0x" | "0X" }
+hex_lit = ${ hex_prefix ~ hex_digit+ }
+dec_lit = ${ dec_digit+ }
+
+int_lit = ${ bin_lit | hex_lit | dec_lit }
+
+ident = ${
+    ( 'a'..'z' | 'A'..'Z' | "_" | '\u{203C}'..'\u{3299}' | '\u{1F000}'..'\u{1F644}' )
+    ~ ( 'a'..'z' | 'A'..'Z' | "_" | '0'..'9' | '\u{203C}'..'\u{3299}' | '\u{1F000}'..'\u{1F644}' )* }
+
+primary_expr = { ident | int_lit | (lparen ~ expr ~ rparen) | (new_kw ~ ( type_specifier | ( lparen ~ type_name ~ rparen ) ) ) }
+
+postfix_deref = { struct_deref_op ~ ident }
+postfix_index = { lbrack ~ expr ~ rbrack }
+postfix_call = { lparen ~ argument_expr_list ~ rparen }
+postfix_dot_call = { "." ~ ident ~ lparen ~ argument_expr_list ~ rparen }
+postfix_deref_call = { struct_deref_op ~ ident ~ lparen ~ argument_expr_list ~ rparen }
+postfix_dot = { dot ~ ident }
+
+postfix_expr = {
+    primary_expr ~ ( postfix_index | postfix_call | postfix_deref_call | 
+    postfix_dot_call | postfix_dot | postfix_deref )* }
+
+argument_expr_list = { (assign_expr ~ (comma ~ assign_expr)*)? }
+
+unary_operator = { "&" | "-" | "~" | "!" | "*" }
+
+unary_expr = {
+      unary_operator ~ cast_expr
+    | postfix_expr
+}
+
+cast_expr = {
+      unary_expr
+    | ( lparen ~ type_name ~ rparen ~ cast_expr )
+}
+
+eq_operator = { neq | equals }
+mul_operator = { mul | div | modulus }
+add_operator = { add | sub }
+cmp_operator = { gte | lte | gt | lt }
+
+sizeof_expr = { ( sizeof_kw ~ ( type_specifier | ( lparen ~ type_name ~ rparen ) ) ) | cast_expr }
+mul_expr    = { sizeof_expr ~ ( mul_operator ~ sizeof_expr )* }
+add_expr    = { mul_expr    ~ ( add_operator ~ mul_expr )* }
+// shift_expr  = { add_expr    ~ ( ( lsh | rsh ) ~ add_expr )* }
+cmp_expr    = { add_expr  ~ ( cmp_operator ~ add_expr )* }
+eq_expr     = { cmp_expr    ~ ( eq_operator ~ cmp_expr )* }
+//and_expr    = { eq_expr     ~ ( and ~ eq_expr )* }
+//xor_expr    = { and_expr    ~ ( xor ~ and_expr )* }
+//or_expr     = { xor_expr    ~ ( or ~ xor_expr )* }
+assign_expr = { eq_expr     ~ ( assign_operator ~ eq_expr )* }
+
+assign_operator = {
+      eq
+    | "*="
+    | "/="
+    | "%="
+    | "+="
+    | "-="
+    | "<<="
+    | ">>="
+    | "&="
+    | "^="
+    | "|="
+}
+
+expr = { assign_expr } // ~ ( comma ~ assign_expr )* }
+
+constant_expr = { eq_expr }
+declaration = { declaration_specifiers ~ init_declarator_list? ~ semicolon }
+
+declaration_specifiers = {
+      //( storage_class_specifier | type_qualifier )* ~
+      type_specifier
+}
+
+init_declarator_list = { init_declarator ~ ( comma ~ init_declarator )* }
+init_declarator = { declarator ~ ( eq ~ assign_expr )? }
+//initializer )? }
+
+storage_class_specifier = { typedef_kw | extern_kw | static_kw | auto_kw | register_kw }
+type_specifier = { void_kw | int_type | struct_or_union_spec
+//enum_specifier |
+}
+
+struct_or_union = _{
+    struct_kw
+    // | union_kw
+}
+struct_or_union_spec = {
+      ( struct_kw ~ ident ~ (colon ~ struct_kw ~ ident)? ~ lbrace ~ struct_declaration_list ~ rbrace )
+    | ( struct_kw ~ ident )
+}
+
+struct_declaration_list = { struct_declaration+ }
+field_declaration = { type_specifier ~ struct_declarator_list ~ semicolon }
+struct_declaration = _{ field_declaration | function_header | function_definition }
+//spec_qualifier_list = { //type_qualifier* ~
+//    type_specifier
+//}
+struct_declarator_list = { struct_declarator ~ ( comma ~ struct_declarator )* }
+struct_declarator = { declarator }
+      //( declarator ~ ( colon ~ constant_expr )? )
+    //| ( colon ~ constant_expr )
+//}
+
+//enum_specifier = {
+//      ( enum_kw ~ ident ~ ( lbrace ~ enumerator_list ~ rbrace )? )
+//    | ( enum_kw ~ lbrace ~ enumerator_list ~ rbrace )
+//}
+
+//enumerator_list = { enumerator ~ ( comma ~ enumerator )* }
+//enumerator = { ident ~ ( eq ~ constant_expr )? }
+
+//type_qualifier = { const_kw | volatile_kw }
+double_colon = _{ "::" }
+function_declarator = { pointer? ~ function_direct_declarator }
+function_direct_declarator = {
+    ( ident ~ ( double_colon ~ ident )? | (lparen ~ declarator ~ rparen) ) ~ ( direct_declarator_array | direct_declarator_call )*
+}
+declarator = { pointer? ~ direct_declarator }
+direct_declarator_array = { lbrack ~ constant_expr? ~ rbrack }
+direct_declarator_call  = { lparen ~ ( parameter_list | ident_list )? ~ rparen }
+direct_declarator       = { ident
+    //( ident | (lparen ~ declarator ~ rparen) ) ~ ( direct_declarator_array | direct_declarator_call )*
+}
+pointer = {
+      mul+
+    //| ( mul ~ type_qualifier_list )
+    // | ( mul ~ pointer )
+    //| ( mul ~ type_qualifier_list ~ pointer )
+    }
+
+// type_qualifier_list = { type_qualifier* }
+// parameter_type_list = { parameter_list  } // ~ ( comma ~ "..." )? }
+parameter_list = { parameter_declaration ~ ( comma ~ parameter_declaration )* }
+parameter_declaration = { declaration_specifiers ~ ( declarator )? }
+
+ident_list = { ident ~ ( comma ~ ident )* }
+
+type_name = { type_specifier ~ pointer? }
+abstract_declarator = { ( pointer ~ direct_abstract_declarator? ) | direct_abstract_declarator }
+
+direct_abstract_brack = { lbrack ~ constant_expr? ~ rbrack }
+direct_abstract_paren = { lparen ~ parameter_list? ~ rparen }
+direct_abstract_tail = { direct_abstract_brack | direct_abstract_paren }
+direct_abstract_declarator = {
+      ( lparen ~ ( abstract_declarator | parameter_list )? ~ rparen ~ direct_abstract_tail* )
+    | ( lbrack ~ constant_expr? ~ rbrack ~ direct_abstract_tail* )
+}
+
+initializer = {
+      assign_expr
+    //| ( lbrace ~ initializer_list ~ comma? ~ rbrace )
+}
+
+initializer_list = { initializer ~ ( comma ~ initializer )* }
+
+stmt = {
+//labeled_stmt |
+    compound_stmt | jump_stmt | expr_stmt | selection_stmt | iteration_stmt
+}
+//labeled_stmt = {
+//      ( ident ~ colon ~ stmt )
+//    | ( case_kw ~ constant_expr ~ colon ~ stmt )
+//    | ( default_kw ~ colon ~ stmt )
+//}
+compound_stmt = { lbrace ~ ( stmt | declaration )* ~ rbrace }
+stmt_list = { stmt+ }
+expr_stmt = { expr? ~ semicolon }
+selection_stmt = {
+      ( if_kw ~ expr ~ stmt ~ ( else_kw ~ stmt )? )
+    // | ( switch_kw ~ expr ~ stmt )
+}
+
+for_first = { declaration | semicolon }
+for_second = { expr_stmt? }
+for_third = { expr? }
+iteration_stmt = {
+      ( while_kw ~ expr ~ stmt )
+    | ( for_kw ~ lparen ~ for_first ~ for_second ~ for_third ~ rparen ~ stmt )
+}
+
+jump_stmt =  {
+    ( continue_kw ~ semicolon )
+    // | ( goto_kw ~ ident ~ semicolon )
+    | ( break_kw ~ semicolon )
+    | ( return_kw ~ expr? ~ semicolon )
+}
+
+translation_unit = { external_declaration+ }
+external_declaration = { function_definition | declaration }
+function_header = { declaration_specifiers? ~ function_declarator ~ semicolon }
+function_definition = { declaration_specifiers? ~ function_declarator ~ compound_stmt }
+t1 = { function_definition ~ EOI }
+
+declaration_list = { declaration+ }
+
+program = { SOI ~ WHITESPACE* ~ ( function_definition | ( struct_or_union_spec ~ semicolon ) )+ ~ WHITESPACE* ~ EOI }

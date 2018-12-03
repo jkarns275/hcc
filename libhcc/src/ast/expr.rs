@@ -326,6 +326,20 @@ impl PrimaryExpr {
                 }
                 Rule::int_lit => IntLit::from_pair(next, context)?,
                 Rule::expr => Expr::from_pair(next, context)?,
+                Rule::new_kw => {
+                    let next = pairs.next().unwrap();
+                    match next.as_rule() {
+                        Rule::type_specifier | Rule::type_name => {
+                            let ty = Ty::from_pair(next, context)?;
+                            Expr {
+                                span: PosSpan::from_span(span),
+                                expr: ExprKind::New(ty),
+                                ty: None,
+                            }
+                        },
+                        _ => unreachable!("Something is wrong with primary_expr new subrule")
+                    }
+                },
                 _ => unreachable!("Something is wrong with primary_expr rule"),
             })
         } else {
@@ -652,7 +666,7 @@ pub struct MethodCall {
     pub method_name: Id,
     pub args: Vec<Expr>, 
     pub lhs: Expr,
-    pub f: Option<(Ty, usize)>,
+    pub f: Option<usize>,
 }
 
 pub struct Cast {
@@ -680,6 +694,7 @@ pub enum ExprKind {
     Cast(Box<Cast>),
     Ident(Id),
     Number(i64),
+    New(Ty),
     NoOp,
 }
 

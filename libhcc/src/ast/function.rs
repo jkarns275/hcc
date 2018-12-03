@@ -20,6 +20,7 @@ pub struct Function {
     /// Id of the Struct
     pub method: Option<Id>,
     pub span: PosSpan,
+    pub vtable_signature: Option<String>,
 }
 
 impl Function {
@@ -43,6 +44,7 @@ impl Function {
                 method,
                 body,
                 span: PosSpan::from_span(span),
+                vtable_signature: None,
             })
         } else {
             // Just a function header
@@ -54,6 +56,7 @@ impl Function {
                 body: None,
                 method,
                 span: PosSpan::from_span(span),
+                vtable_signature: None,
             })
         }
     }
@@ -155,5 +158,68 @@ impl Function {
             }
         }
         true
+    }
+
+    pub fn fn_ptr_decl(&self, fn_name: Id, idstore: IdStore) -> String {
+        let name_and_return_type = format!("{} (*{})", self.return_type.to_code(idstore), idstore.get_str(fn_name));
+        let args = {
+            let mut s = String::new();
+            if self.arg_order.len() == 0 {
+                s
+            } else {
+                let mut s = String::new();
+                for arg in self.arg_order.iter() {
+                    s.push(format!("{}, ", self.args[arg].to_code(idstore)).as_str());
+                }
+                s.pop();
+                s.pop();
+                s
+            }
+        };
+        format!("{}({})", name_and_return_type, args)
+    }
+
+    pub fn method_ptr_decl(&self, struct_name: Id, method_name: Id, idstore: &IdStore) -> String {
+        let name_and_return_type = format!("{} (*{})", self.return_type.to_code(idstore), idstore.get_str(method_name));
+        let args = {
+            let mut s = Ty::new(TyKind::Struct(struct_name)).ptr_to().to_code(idsore);
+            if self.arg_order.len() == 0 {
+                s
+            } else {
+                s.push_str(", ");
+                let mut s = String::new();
+                for arg in self.arg_order.iter() {
+                    s.push(format!("{}, ", self.args[arg].to_code(idstore)).as_str());
+                }
+                s.pop();
+                s.pop();
+                s
+            }
+        };
+        format!("{}({})", name_and_return_type, args)
+    }
+
+    pub fn signature(&self, idstore: &IdStore) -> String {
+        let mut s = String::new();
+        for arg in self.arg_order.iter() {
+            let ty = self.args[arg].clone();
+            s.push(ty.ptr.to_string())
+            s.push_str(
+                match self.args[arg].clone().kind {
+                    TyKind::I0 => "i0",
+                    TyKind::I8 => "i8",
+                    TyKind::I64 => "i64",
+                    TyKind::Struct(name) => idstore.get_str(name),
+                }
+            );
+        }
+        s
+    }
+
+    pub fn vtable_signature(&self, idstore: &IdStore) -> String {
+        if let Some(s) = self.vtable_signature.clone() { return s }
+        let mut s = "vtable_".to_owned() + self.signature(idstore);
+        self.vtable_signature = Some(s);
+        self.vtable_signature.clone().unwrap()
     }
 }
