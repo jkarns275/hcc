@@ -97,7 +97,7 @@ impl Function {
             if let Some(parameter_list) = pairs.next() {
                 let span = parameter_list.as_span();
 
-                let mut pairs = parameter_list.into_inner();
+                let pairs = parameter_list.into_inner();
                 let mut params = HashMap::new();
                 let mut order = vec![];
 
@@ -164,7 +164,7 @@ impl Function {
     pub fn fn_ptr_decl(&self, fn_name: Id, idstore: &IdStore) -> String {
         let name_and_return_type = format!("{} (*{})", self.return_type.to_code(idstore), idstore.get_str(fn_name));
         let args = {
-            let mut s = String::new();
+            let s = String::new();
             if self.arg_order.len() == 0 {
                 s
             } else {

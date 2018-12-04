@@ -367,13 +367,14 @@ impl TypeChecker {
             Ty::new(TyKind::I0)
         };
         if it.initializer.is_some() && cast.is_some() {
+            let to = cast.unwrap();
             it.initializer = Some(Expr {
                 expr: ExprKind::Cast(box Cast {
-                    to: cast.unwrap(),
+                    to: to.clone(),
                     expr: it.initializer.take().unwrap(),
                 }),
                 span,
-                ty: None
+                ty: Some(to)
             });
         }
         self.numeric_type_hint.pop();
@@ -835,18 +836,6 @@ impl TypeChecker {
                 ty: Ty::new(TyKind::I0),
             });
             return Ty::error()
-        }
-
-        if let Some(s) = self.structs.remove(&it.name) {
-            if s.empty {
-                it.merge(s);
-            } else {
-                self.errs.push(TypeError {
-                    err: TypeErrorKind::DuplicateStructDefinitions { other_span: s.span, name: it.name },
-                    span: it.span,
-                    ty: Ty::new(TyKind::I0)
-                })
-            }
         }
 
         let name = it.name;

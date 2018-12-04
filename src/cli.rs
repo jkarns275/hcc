@@ -2,9 +2,10 @@ extern crate pest;
 use pest::*;
 
 extern crate libhcc;
-use libhcc::{ast, parser, visitors::typecheck};
+use libhcc::{ast, parser, visitors::*};
 
 use typecheck::*;
+use codegen::*;
 use parser::*;
 use ast::*;
 
@@ -86,7 +87,7 @@ impl NotiPrinter {
         println!("{}---> {}:{}:{}", indent, filename, line_n_str, col);
         println!("{}|", indent);
         println!(" {} |  {}", line_n_str, &self.lines[line - 1][..]);
-        println!("{}|  {}{}", indent, " ".to_string().repeat(col - 1), 
+        println!("{}|  {}{}\n{}|", indent, " ".to_string().repeat(col - 1), 
             match endcol - col {
                 1 | 0 => {
                     "^".to_string()
@@ -104,7 +105,7 @@ impl NotiPrinter {
                     s.push('^');
                     s
                 }
-            }
+            }, indent
         );
         if lines.len() > 1 {
             let (fg, bg) = NotiType::Note.as_ansi_colors();
@@ -136,12 +137,14 @@ extern crate argparse;
 use argparse::*;
 use argparse::ArgumentParser;
 use argparse::StoreTrue;
+use std::fs;
 
 fn main() {
     let mut check = false;
     let mut verbose = false;
     let mut file: Option<String> = None;
     let mut wd: String = "./".to_string();
+    let mut output_file = "a.c".to_string();
 
     let mut usage = vec![];
     {
@@ -155,73 +158,73 @@ fn main() {
             .add_option(&["-v", "--verbose"], StoreTrue, "verbose output");
         ap.refer(&mut wd)
             .add_option(&["-w", "--dir"], Store, "working directory");
+        ap.refer(&mut output_file)
+            .add_option(&["-o", "--output"], Store, "output file");
         ap.print_help("hcc", &mut usage).unwrap();
         ap.parse_args_or_exit();
     }
 
-    if check {
-        if file.is_none() {
-            cli_notify("No source file supplied.", NotiType::Warning);
-            return
-        }
-
-        {
-            let src = file.unwrap();
-            let (src, lines, line_info) = apply_pre_processor(src.as_str(), &wd);
-            let parse_res = parse(&src[..]);
-            let noti_printer = NotiPrinter {
-                program_text: src.to_string(),
-                line_info: line_info.clone(),
-                lines: lines.clone(),
-            };
-            match parse_res {
-                Ok(parse_result) => {
-                    if verbose {
-                        cli_notify("parse ok.", NotiType::Note);
-                        cli_notify(format!("{:?}", parse_result).as_str(), NotiType::Verbose);
-                    }
-                    let mut ast = Ast::from_pairs(parse_result);
-                    match ast {
-                        Ok(ast) => {
-                            if verbose {
-                                cli_notify("ast construction ok.", NotiType::Note);
-                            }
-                            match TypeChecker::typecheck(ast) {
-                                (Ok(_ast), _warnings) => {
-                                    if verbose {
-                                        cli_notify("type check ok.", NotiType::Note);
-                                    }
-
-                                },
-                                (Err((errors, idstore)), _warnings) => {
-                                    for error in errors {
-                                        if error.ty.is_error() { continue }
-                                        let err_str = error.to_string(&lines[..], &idstore, &line_info, &src[..]);
-                                        noti_printer.print_noti(NotiType::Error, error.span, &err_str[..])
-                                    }
-                                },
-                            }
-                        },
-                        Err(e) => {
-                            for error in e {
-                                noti_printer.print_noti(NotiType::Error,
-                                                          PosSpan {
-                                                              start: error.span.start,
-                                                              end: error.span.start },
-                                                          error.err_msg.as_str());
-                            }
-                        },
-                    }
-                },
-                Err((string, (start, end))) => {
-                    noti_printer.print_noti(NotiType::Error, PosSpan { start, end },
-                                            string.as_str());
-                },
-            }
-        }
+    if file.is_none() {
+        cli_notify("No source file supplied.", NotiType::Note);
+        let usage = String::from_utf8_lossy(&usage).to_string();
+        println!("{}", usage);
         return
     }
 
-    let usage = String::from_utf8_lossy(&usage).to_string();
-    println!("{}", usage);
+    {
+        let src = file.unwrap();
+        let (src, lines, line_info) = apply_pre_processor(src.as_str(), &wd);
+        let parse_res = parse(&src[..]);
+        let noti_printer = NotiPrinter {
+            program_text: src.to_string(),
+            line_info: line_info.clone(),
+            lines: lines.clone(),
+        };
+        match parse_res {
+            Ok(parse_result) => {
+                if verbose {
+                    cli_notify("parse ok.", NotiType::Note);
+                    cli_notify(format!("{:?}", parse_result).as_str(), NotiType::Verbose);
+                }
+                let mut ast = Ast::from_pairs(parse_result);
+                match ast {
+                    Ok(ast) => {
+                        if verbose {
+                            cli_notify("ast construction ok.", NotiType::Note);
+                        }
+                        match TypeChecker::typecheck(ast) {
+                            (Ok(ast), _warnings) => {
+                                if verbose {
+                                    cli_notify("type check ok.", NotiType::Note);
+                                }
+                                if check { return }
+                                let output = CG::codegen(ast);
+                                fs::write(output_file, output).unwrap();
+                            },
+                            (Err((errors, idstore)), _warnings) => {
+                                for error in errors {
+                                    if error.ty.is_error() { continue }
+                                    let err_str = error.to_string(&lines[..], &idstore, &line_info, &src[..]);
+                                    noti_printer.print_noti(NotiType::Error, error.span, &err_str[..])
+                                }
+                            },
+                        }
+                    },
+                    Err(e) => {
+                        for error in e {
+                            noti_printer.print_noti(NotiType::Error,
+                                                        PosSpan {
+                                                            start: error.span.start,
+                                                            end: error.span.start },
+                                                        error.err_msg.as_str());
+                        }
+                    },
+                }
+            },
+            Err((string, (start, end))) => {
+                noti_printer.print_noti(NotiType::Error, PosSpan { start, end },
+                                        string.as_str());
+            },
+        }
+    }
 }

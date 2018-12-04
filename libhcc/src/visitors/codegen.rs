@@ -12,7 +12,6 @@ use std::fmt::{Formatter, self, Display};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::cell::*;
-use std::mem;
 
 #[derive(Copy, Clone)]
 pub struct Label(usize);
@@ -36,10 +35,12 @@ pub struct CG {
     pub lbl_counter: usize,
     pub tmp_counter: usize,
     pub output: String,
-    pub fns: HashMap<Id, Vec<Rc<Function>>>,
-    pub structs: HashMap<Id, Rc<RefCell<Structure>>>,
-    pub vtables: HashMap<Id, Vec<Rc<RefCell<Structure>>>>,
-    pub parents: HashMap<Id, Rc<RefCell<Structure>>>,
+    pub fns: HashMap<Id, Vec<Rc<UnsafeCell<Function>>>>,
+    pub structs: HashMap<Id, Rc<UnsafeCell<Structure>>>,
+    pub vtables: HashMap<Id, Vec<Rc<UnsafeCell<Structure>>>>,
+    pub parents: HashMap<Id, Rc<UnsafeCell<Structure>>>,
+    pub continue_stack: Vec<Label>,
+    pub break_stack: Vec<Label>,
     pub current_ty: Ty,
     pub roots: HashMap<Id, Id>,
 }
@@ -47,16 +48,67 @@ pub struct CG {
 
 impl CG {
 
+    pub fn codegen(ast: Ast) -> String {
+        //ids: IdStore, fns: HashMap<Id, Vec<Rc<Function>>>, structs: HashMap<Id, Rc<RefCell<Structure>>>) -> String {
+        let structs = {
+            let mut structs = HashMap::with_capacity(ast.structs.len());
+            for (name, structure) in ast.structs {
+                structs.insert(name, Rc::new(UnsafeCell::new(Rc::try_unwrap(structure).ok().unwrap())));
+            }
+            structs
+        };
+        let fns = {
+            let mut fns = HashMap::with_capacity(ast.functions.len());
+            for (name, flist) in ast.functions {
+                fns.insert(name, flist.into_iter().map(|x| Rc::new(UnsafeCell::new(Rc::try_unwrap(x).ok().unwrap()))).collect::<Vec<_>>());
+            }
+            fns
+        };
+        let mut cg = CG {
+            ids: ast.idstore,
+            fns,
+            structs,
+            vtables: HashMap::new(),
+            parents: HashMap::new(),
+            current_ty: Ty::error(),
+            roots: HashMap::new(),
+            output: String::new(),
+            continue_stack: vec![],
+            break_stack: vec![],
+            lbl_counter: 0,
+            tmp_counter: 0,
+        };
+        
+        cg.visit_struct_headers();
+        cg.visit_function_headers();
+
+        let structures = cg.structs.clone();
+
+        for structure in structures.values() {
+            let mut structure = unsafe { (**structure).get().as_mut() }.unwrap();
+            cg.visit_struct(&mut *structure);
+            cg.visit_methods(&mut *structure);
+        }
+        for structure in structures.values() {
+            let mut structure = unsafe { (**structure).get().as_mut() }.unwrap();
+            cg.visit_method_headers(&mut *structure);
+        }
+
+        cg.visit_functions();
+
+        cg.output
+    }
+
     fn get_root_struct(&mut self, child: Id) -> Id {
         if self.roots.contains_key(&child) {
             self.roots[&child]
         } else {
             let mut par = Some(child);
             while let Some(parent) = par {
-                if (*self.structs[&parent]).borrow().parent.is_none() {
+                if unsafe { (*self.structs[&parent]).get().as_ref() }.unwrap().parent.is_none() {
                     break
                 }
-                par = (*self.structs[&parent]).borrow().parent;
+                par = unsafe { (*self.structs[&parent]).get().as_ref() }.unwrap().parent;
             }
             let parent = par.unwrap();
             self.roots.insert(child, parent);
@@ -65,7 +117,9 @@ impl CG {
     }
 
     fn emit<S: Into<String>>(&mut self, string: S) { self.output.push_str(string.into().as_str()); }
-    fn emit_label(&mut self, label: Label) { self.output.push_str(label.to_string().as_str()); }
+    fn emit_label(&mut self, label: Label) { 
+        self.output += format!("{}:\n", label.to_string()).as_str();
+        }
 
     fn next_tmp(&mut self) -> Id {
         let next = self.tmp_counter;
@@ -80,7 +134,7 @@ impl CG {
     }
 
     pub fn generate_method_header(&mut self, it: &Function, conforming_structure: Id, structure: Id) -> String {
-        let mut args = format!("{} this, ", Ty::new(TyKind::Struct(structure)).ptr_to().to_code(&self.ids));
+        let mut args = format!("{} _this, ", Ty::new(TyKind::Struct(structure)).ptr_to().to_code(&self.ids));
         for arg in it.arg_order.iter() {
             let decl = &it.args[arg];
             args.push_str(format!("{} _{}, ", decl.ty.to_code(&self.ids), self.ids.get_str(*arg)).as_str())
@@ -94,8 +148,34 @@ impl CG {
         format!("{} {}({})", it.return_type.to_code(&self.ids), method_name, args)
     }
 
-    pub fn generate_struct_header(&mut self, it: &mut Structure) -> String {
+    pub fn generate_struct_header(&mut self, it: &Structure) -> String {
         format!("struct _{}", self.ids.get_str(it.name))
+    }
+
+    pub fn visit_struct_headers(&mut self) {
+        let structures = self.structs.values().map(|x| x.clone()).collect::<Vec<_>>();
+        for structure in structures {
+            let structure = unsafe { (*structure).get().as_ref() }.unwrap();
+            self.visit_struct_header(&*structure);
+        }
+    }
+
+    pub fn visit_function_headers(&mut self) {
+        let cloned_fns = self.fns.clone();
+        for (_name, fn_list) in cloned_fns {
+            for i in 0..fn_list.len() {
+                self.visit_function_header(unsafe { fn_list[i].get().as_ref() }.unwrap(), i);
+            }
+        }
+    }
+
+    pub fn visit_functions(&mut self) {
+        let cloned_fns = self.fns.clone();
+        for (_name, fn_list) in cloned_fns {
+            for i in 0..fn_list.len() {
+                self.visit_function(unsafe { fn_list[i].get().as_mut() }.unwrap(), i);
+            }
+        }
     }
 
     pub fn visit_method_headers(&mut self, it: &mut Structure) {
@@ -103,7 +183,7 @@ impl CG {
         let mut cur_struct = Some(it.name);
         while let Some(struct_name) = cur_struct.take() {
             let structure_rc = self.structs[&struct_name].clone();
-            let mut structure = (*structure_rc).borrow();
+            let mut structure = unsafe { (*structure_rc).get().as_ref() }.unwrap();
             for (id, functions) in structure.methods.iter() {
                 for f in functions.iter() {
                     let method_signature = (*id, f.signature(&self.ids));
@@ -124,7 +204,7 @@ impl CG {
         let mut cur_struct = Some(it.name);
         while let Some(struct_name) = cur_struct.take() {
             let structure_rc = self.structs[&struct_name].clone();
-            let mut structure = (*structure_rc).borrow_mut();
+            let mut structure = unsafe { (*structure_rc).get().as_mut() }.unwrap();
             for (id, functions) in structure.methods.iter_mut() {
                 for f in functions.iter_mut() {
                     let method_signature = (*id, f.signature(&self.ids));
@@ -132,13 +212,14 @@ impl CG {
                         continue
                     }
                     self.visit_method(f, struct_name, it.name);
+                    method_set.insert(method_signature);
                 }
             }
             cur_struct = structure.parent;
         }
     }
 
-    pub fn visit_struct_header(&mut self, it: &mut Structure) {
+    pub fn visit_struct_header(&mut self, it: &Structure) {
         let header = self.generate_struct_header(it);
         self.emit(format!("{};", header));
     }
@@ -148,7 +229,7 @@ impl CG {
         self.emit(format!("{} {{\n", header));
 
         if it.type_id != -1 {
-            let mut par = it.parent.clone();
+            let par = it.parent.clone();
             let root_parent = self.get_root_struct(it.name);
             {
                 let entry = self.vtables.entry(root_parent).or_insert_with(|| vec![]);
@@ -167,7 +248,7 @@ impl CG {
         while let Some(super_name) = parent.take() {
             let structure_rc = self.structs[&super_name].clone();
             self.parents.insert(it.name, structure_rc.clone());
-            let structure = (*structure_rc).borrow();
+            let structure = unsafe { (*structure_rc).get().as_ref() }.unwrap();
             let mut comment = true;
             for (field_name, field) in structure.fields.iter() {
                 if comment {
@@ -192,14 +273,20 @@ impl CG {
         }
     }
     fn visit_while(&mut self, it: &mut WhileStmt) -> Label {
+        self.emit("{\n");
         let loop_start = self.next_label();
+        self.continue_stack.push(loop_start);
         self.emit_label(loop_start);
         let loop_end = self.next_label();
+        self.break_stack.push(loop_end);
         let cond = self.visit_expr(&mut it.cond);
         self.emit(format!("    if ( {} ) goto {};\n", self.ids.get_str(cond), loop_end));
         self.visit_stmt(&mut it.body);
         self.emit(format!("    goto {};\n", loop_start));
+        self.emit("}\n");
         self.emit_label(loop_end);
+        self.continue_stack.pop();
+        self.break_stack.pop();
         loop_start
     }
     fn visit_body(&mut self, it: &mut Body) -> Label {
@@ -216,7 +303,7 @@ impl CG {
             let true_body = self.next_label();
             let false_body = self.next_label();
             let end = self.next_label();
-            let goto_end = format!("    goto {}\n;", end);
+            let goto_end = format!("    goto {};\n", end);
             let cond = self.visit_expr(&mut it.cond);
             self.emit(format!("    if ( {} ) goto {};\n    else goto {};\n", self.ids.get_str(cond), true_body, false_body));
             self.emit_label(true_body);
@@ -241,8 +328,8 @@ impl CG {
         let start = self.next_label();
         self.emit_label(start);
         match it {
-            JumpStmt::Break => self.emit("    break;\n                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               "),
-            JumpStmt::Continue => self.emit("    continue;\n"),
+            JumpStmt::Break => self.emit(format!("    goto {};\n", self.break_stack.last().cloned().unwrap().to_string())),
+            JumpStmt::Continue => self.emit(format!("    goto {};\n", self.continue_stack.last().cloned().unwrap().to_string())),
             JumpStmt::Return((None, _)) => self.emit("    return;\n"),
             JumpStmt::Return((Some(ref mut expr), _)) => {
                 let val = self.visit_expr(expr);
@@ -266,7 +353,7 @@ impl CG {
     fn visit_expr(&mut self, it: &mut Expr) -> Id {
         let span = it.span.clone();
         let prev_ty = self.current_ty.clone();
-        self.current_ty = it.ty.clone().unwrap();
+        self.current_ty = it.ty.clone().unwrap_or(Ty::error());
         let ret = match &mut it.expr {
             ExprKind::Index(ref mut index)        => self.visit_index(index),
             ExprKind::Dot(ref mut dot)            => self.visit_dot(dot),
@@ -328,12 +415,7 @@ impl CG {
         }
 
         let ind = it.f.clone().unwrap();
-        let fn_name =
-            if self.fns[&ind].len() == 1 {
-                format!("{}", self.ids.get_str(it.fn_name))
-            } else {
-                format!("{}_{:#x}", self.ids.get_str(it.fn_name), ind)
-            };
+        let fn_name = format!("{}_{:#x}", self.ids.get_str(it.fn_name), ind);
         self.emit(format!("    {} {} = {}( {} );\n", self.current_ty.to_code(&self.ids), self.ids.get_str(result), fn_name, args_string));
         result
     }
@@ -357,7 +439,7 @@ impl CG {
         }
         
         let structure_rc = self.structs[&struct_name].clone();
-        let structure = (*structure_rc).borrow();
+        let structure = unsafe { (*structure_rc).get().as_ref() }.unwrap();
         if structure.type_id != -1 && structure.children.len() != 0 {
             let tid = self.next_tmp();
             self.emit(format!("i8 {} = *((i8*) {});\n", self.ids.get_str(tid), self.ids.get_str(lhs)));
@@ -366,7 +448,7 @@ impl CG {
             let root_parent = self.get_root_struct(conforming_struct);
             let (method_decl, vtable_signature) = {
                 let structure_rc = self.structs[&struct_name].clone();
-                let mut structure = (*structure_rc).borrow_mut();
+                let mut structure = unsafe { (*structure_rc).get().as_mut() }.unwrap();
                 let func = structure.methods.get_mut(&it.method_name).unwrap()[index].borrow_mut();
                 (func.method_ptr_decl(struct_name, fn_ptr, &self.ids), func.vtable_signature(&self.ids))
             };
@@ -374,21 +456,21 @@ impl CG {
             self.emit(format!("    {} {} = (*{})({});\n", self.current_ty.to_code(&self.ids), self.ids.get_str(result), self.ids.get_str(fn_ptr), args_string));
         } else {
             let (conforming_struct, index) = it.f.clone().unwrap();
-            let method_signature = (*self.structs[&conforming_struct]).borrow().methods[&it.method_name][index].signature(&self.ids);
+            let method_signature = unsafe { (*self.structs[&conforming_struct]).get().as_ref() }.unwrap().methods[&it.method_name][index].signature(&self.ids);
             self.emit(format!("    {} {} = {}_{}_{}_{}({});\n", self.current_ty.to_code(&self.ids), self.ids.get_str(result), 
                             self.ids.get_str(conforming_struct), self.ids.get_str(struct_name), self.ids.get_str(it.method_name), 
                             method_signature, args_string));
         }
         result
     }
-    fn visit_sizeofexpr(&mut self, it: &mut Ty, span: PosSpan) -> Id {
+    fn visit_sizeofexpr(&mut self, it: &mut Ty, _span: PosSpan) -> Id {
         let result = self.next_tmp();
         self.emit(format!("    i64 {} = sizeof ({});\n", self.ids.get_str(result), it.to_code(&self.ids)));
         result
     }
     fn visit_mulexpr(&mut self, it: &mut MulExpr) -> Id {
         let result = self.next_tmp();
-        let mut terms = it.tail.iter_mut().map(|x| (self.visit_expr(&mut x.1), x.0.clone())).collect::<Vec<_>>();
+        let terms = it.tail.iter_mut().map(|x| (self.visit_expr(&mut x.1), x.0.clone())).collect::<Vec<_>>();
         let mut exp = "".to_owned();
 
         let first = self.visit_expr(&mut it.head);
@@ -549,7 +631,7 @@ impl CG {
                     self.emit(format!("    struct {0}* {1} = (struct {0}*) malloc ( sizeof(struct {0}) );\n", self.ids.get_str(name), self.ids.get_str(binding)));
                     let type_init_code = {
                         let structure_rc = self.structs[&name].clone();
-                        let structure = (*structure_rc).borrow();
+                        let structure = unsafe { (*structure_rc).get().as_ref() }.unwrap();
                         if structure.type_id != -1 {
                             Some(format!("    {}->type_id[0] = {};\n", self.ids.get_str(binding), structure.type_id))
                         } else {
@@ -581,6 +663,22 @@ impl CG {
         self.emit("}\n");
 
         Label(0)
+    }
+
+    fn visit_function_header(&mut self, it: &Function, i: usize) {
+        let mut args = String::new();
+        for arg in it.arg_order.iter() {
+            let decl = it.args.get(arg).unwrap();
+            args.push_str(format!("{} _{}, ", decl.ty.to_code(&self.ids), self.ids.get_str(*arg)).as_str());
+        }
+        args.pop();
+        args.pop();
+
+        let fn_name = format!("{}_{:#x}", self.ids.get_str(it.name), i);
+
+        let ret_type = it.return_type.to_code(&self.ids);
+
+        self.emit(format!("{} {}({});\n", ret_type, fn_name, args));
     }
 
     fn visit_function(&mut self, it: &mut Function, i: usize) -> Label {

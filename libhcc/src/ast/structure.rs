@@ -108,7 +108,7 @@ impl Structure {
                 next = pairs.next();
             }
             let declarations = next.expect("Unexpected end of tokens while parsing struct.");
-            let (fields, mut methods)
+            let (fields, methods)
                 = Structure::fields_and_methods_from_pairs(declarations, context, name)?;
             Structure {
                 methods, fields, parent_span, parent,
