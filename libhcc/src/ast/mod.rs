@@ -78,14 +78,14 @@ impl AstError {
     }
 }
 
-pub struct Ast<'a> {
-    pub idstore: IdStore<'a>,
+pub struct Ast {
+    pub idstore: IdStore,
     pub structs: HashMap<Id, Rc<Structure>>,
     pub functions: HashMap<Id, Vec<Rc<Function>>>,
 }
 
-impl<'a> Ast<'a> {
-    fn from_context<'r>(context: Context<'r>) -> Ast<'r> {
+impl Ast {
+    fn from_context<'r>(context: Context) -> Ast{
         Ast {
             idstore: context.idstore,
             functions: context.functions,
@@ -93,7 +93,7 @@ impl<'a> Ast<'a> {
         }
     }
 
-    pub fn from_pairs(mut pairs: Pairs<'a, Rule>) -> Result<Ast<'a>, Vec<AstError>> {
+    pub fn from_pairs(mut pairs: Pairs<Rule>) -> Result<Ast, Vec<AstError>> {
         let program = pairs.next().unwrap();
         let mut context = Context::new();
 

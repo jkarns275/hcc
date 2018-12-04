@@ -12,7 +12,7 @@ pub struct Declarator {
 }
 
 impl Declarator {
-    pub fn struct_declarator_list_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    pub fn struct_declarator_list_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Vec<Declarator>, AstError> {
         debug_assert!(pair.as_rule() == Rule::struct_declarator_list);
         let pairs = pair.into_inner();
@@ -25,7 +25,7 @@ impl Declarator {
         Ok(decls)
     }
 
-    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Declarator, AstError> {
         debug_assert!(pair.as_rule() == Rule::declarator);
         let span = pair.as_span();
@@ -58,7 +58,7 @@ impl Declarator {
         }
     }
 
-    fn struct_declarator_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    fn struct_declarator_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Declarator, AstError> {
         debug_assert!(pair.as_rule() == Rule::struct_declarator);
         let span = pair.as_span();

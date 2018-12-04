@@ -119,8 +119,7 @@ impl Ty {
                 }
             },
             _ => 
-                if self.kind == other.kind { 1 } 
-                else if self.is_integral_type() && other.is_integral_type() { 1 }
+                if self.kind == other.kind || (self.is_integral_type() && other.is_integral_type()) { 1 } 
                 else { 0 },
         }
     }
@@ -167,7 +166,7 @@ impl Ty {
         self.conforms_to_mag(other, tc) > 0
     }
 
-    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Ty, AstError> {
         match pair.as_rule() {
             Rule::type_name => Self::type_name_from_pair(pair, context),
@@ -176,7 +175,7 @@ impl Ty {
         }
     }
 
-    fn type_name_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    fn type_name_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Ty, AstError> {
         debug_assert!(pair.as_rule() == Rule::type_name);
         let span = pair.as_span();
@@ -194,7 +193,7 @@ impl Ty {
         }
     }
 
-    fn type_specifier_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>) -> Result<Ty, AstError> {
+    fn type_specifier_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context) -> Result<Ty, AstError> {
         debug_assert!(pair.as_rule() == Rule::type_specifier);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();

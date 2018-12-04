@@ -4,7 +4,6 @@ use ast::ty::Ty;
 use ast::AstError;
 use ast::PosSpan;
 use parser::Rule;
-use ast::function::Function;
 
 use pest::iterators::Pair;
 use pest::iterators::Pairs;
@@ -22,7 +21,7 @@ macro_rules! arithmetic_expr {
         impl $name {
             pub fn from_pair<'r>(
                 pair: Pair<'r, Rule>,
-                context: &mut Context<'r>,
+                context: &mut Context,
             ) -> Result<Expr, AstError> {
                 debug_assert!(pair.as_rule() == Rule::$rule);
                 let span = pair.as_span();
@@ -108,7 +107,7 @@ impl Into<&'static str> for MulOp {
 impl MulOp {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        _context: &mut Context<'r>,
+        _context: &mut Context,
     ) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::mul_operator);
         Ok(match pair.as_str() {
@@ -137,7 +136,7 @@ impl Into<&'static str> for AddOp {
 impl AddOp {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        _context: &mut Context<'r>,
+        _context: &mut Context,
     ) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::add_operator);
         Ok(match pair.as_str() {
@@ -170,7 +169,7 @@ impl Into<&'static str> for CmpOp {
 impl CmpOp {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        _context: &mut Context<'r>,
+        _context: &mut Context,
     ) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::cmp_operator);
         Ok(match pair.as_str() {
@@ -220,7 +219,7 @@ impl From<&'static str> for AssignOp {
 impl AssignOp {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        _context: &mut Context<'r>,
+        _context: &mut Context,
     ) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::assign_operator);
         Ok(match pair.as_str() {
@@ -262,7 +261,7 @@ impl From<&'static str> for EqOp {
 impl EqOp {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        _context: &mut Context<'r>,
+        _context: &mut Context,
     ) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::eq_operator);
         Ok(match pair.as_str() {
@@ -277,7 +276,7 @@ struct IntLit;
 impl IntLit {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        _context: &mut Context<'r>,
+        _context: &mut Context,
     ) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::int_lit);
         let span = pair.as_span();
@@ -308,7 +307,7 @@ struct PrimaryExpr;
 impl PrimaryExpr {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        context: &mut Context<'r>,
+        context: &mut Context,
     ) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::primary_expr);
         let span = pair.as_span();
@@ -355,7 +354,7 @@ struct PostfixExpr;
 impl PostfixExpr {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        context: &mut Context<'r>,
+        context: &mut Context,
     ) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::postfix_expr);
         let span = pair.as_span();
@@ -419,10 +418,10 @@ impl PostfixExpr {
                         args.push(AssignExpr::from_pair(next, context)?);
                     }
                     // deref lhs if the deref operator was used.
-                    if r == Rule::postfix_deref_call {
+                    if r != Rule::postfix_deref_call {
                         expr = Expr {
                             span: posspan,
-                            expr: ExprKind::Deref(box expr),
+                            expr: ExprKind::LeaExpr(box expr),
                             ty: None,
                         }
                     }
@@ -484,7 +483,7 @@ enum UnaryOp {
 impl UnaryOp {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        _context: &mut Context<'r>,
+        _context: &mut Context,
     ) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::unary_operator);
         Ok(match pair.as_str() {
@@ -502,7 +501,7 @@ struct UnaryExpr;
 impl UnaryExpr {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        context: &mut Context<'r>,
+        context: &mut Context,
     ) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::unary_expr);
         let span = pair.as_span();
@@ -573,7 +572,7 @@ struct CastExpr;
 impl CastExpr {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        context: &mut Context<'r>,
+        context: &mut Context,
     ) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::cast_expr);
         let span = pair.as_span();
@@ -607,7 +606,7 @@ struct SizeofExpr;
 impl SizeofExpr {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        context: &mut Context<'r>,
+        context: &mut Context,
     ) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::sizeof_expr);
         let span = pair.as_span();
@@ -666,7 +665,7 @@ pub struct MethodCall {
     pub method_name: Id,
     pub args: Vec<Expr>, 
     pub lhs: Expr,
-    pub f: Option<usize>,
+    pub f: Option<(Id, usize)>,
 }
 
 pub struct Cast {
@@ -707,7 +706,7 @@ pub struct Expr {
 impl Expr {
     pub fn from_pair<'r>(
         pair: Pair<'r, Rule>,
-        context: &mut Context<'r>,
+        context: &mut Context,
     ) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::expr);
         let span = pair.as_span();
@@ -720,7 +719,7 @@ impl Expr {
 
     pub fn from_expr_stmt_pair<'r>(
         pair: Pair<'r, Rule>,
-        context: &mut Context<'r>,
+        context: &mut Context,
     ) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::expr_stmt);
         let span = pair.as_span();

@@ -35,7 +35,7 @@ pub struct Structure {
 
 impl Structure {
 
-    pub fn field_from_pair<'r>(pair : Pair<'r, Rule>, context: &mut Context<'r>)
+    pub fn field_from_pair<'r>(pair : Pair<'r, Rule>, context: &mut Context)
         -> Result<Vec<(Id, StructField)>, AstError> {
         debug_assert!(pair.as_rule() == Rule::field_declaration);
         let span = pair.as_span();
@@ -58,7 +58,7 @@ impl Structure {
         Ok(fields)
     }
 
-    pub fn fields_and_methods_from_pairs<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>, name: Id)
+    pub fn fields_and_methods_from_pairs<'r>(pair: Pair<'r, Rule>, context: &mut Context, name: Id)
         -> Result<(HashMap<Id, StructField>, HashMap<Id, Vec<Function>>), AstError> {
         debug_assert!(pair.as_rule() == Rule::struct_declaration_list);
         let mut pairs = pair.into_inner();
@@ -85,7 +85,7 @@ impl Structure {
 
         Ok((fields, methods))
     }
-    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>) -> Result<Self, AstError> {
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::struct_or_union_spec);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();

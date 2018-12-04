@@ -16,7 +16,7 @@ pub struct Declaration {
 }
 
 impl Declaration {
-    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Vec<Declaration>, AstError> {
         debug_assert!(pair.as_rule() == Rule::declaration);
         let span = pair.as_span();
@@ -56,7 +56,7 @@ impl Declaration {
         Ok(declarations)
     }
 
-    pub fn parameter_declaration_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    pub fn parameter_declaration_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Declaration, AstError> {
         debug_assert!(pair.as_rule() == Rule::parameter_declaration);
         let span = pair.as_span();
@@ -78,7 +78,7 @@ impl Declaration {
         })
     }
 
-    fn type_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    fn type_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Ty, AstError> {
         debug_assert!(pair.as_rule() == Rule::declaration_specifiers);
         let span = pair.as_span();

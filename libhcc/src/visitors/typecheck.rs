@@ -167,7 +167,7 @@ pub struct TypeChecker {
 
 impl TypeChecker {
 
-    pub fn typecheck<'a>(ast: Ast<'a>) -> (Result<Ast<'a>, (Vec<TypeError>, IdStore<'a>)>, Vec<TypeWarning>) {
+    pub fn typecheck<'a>(ast: Ast) -> (Result<Ast, (Vec<TypeError>, IdStore)>, Vec<TypeWarning>) {
         let mut idstore = ast.idstore;
         let this = idstore.get_id("this");
         let fns = ast.functions.clone().into_iter().map(|(_, v)| v).collect::<Vec<_>>();
@@ -325,16 +325,16 @@ impl TypeChecker {
                 if let Some(s) = self.structs.get(&name) {
                     if s.empty {
                         self.errs.push(TypeError {
-                            err: TypeErrorKind::IncompleteType { field_name: *field_name },
-                            span: field.span.clone(),
-                            ty: field.ty.clone()
+                            err: TypeErrorKind::IncompleteType { field_name: it.name },
+                            span: it.span.clone(),
+                            ty: it.ty.clone()
                         });
                     }
                 } else {
                     self.errs.push(TypeError {
-                        err: TypeErrorKind::NoSuchStruct { struct_name: name },
-                        span: field.span.clone(),
-                        ty: field.ty.clone()
+                        err: TypeErrorKind::NoSuchStruct { struct_name: *name },
+                        span: it.span.clone(),
+                        ty: it.ty.clone()
                     });
                 }
             },
@@ -573,11 +573,22 @@ impl TypeChecker {
     pub fn visit_method_call(&mut self, it: &mut MethodCall) -> Ty {
         let lhs_ty = self.visit_expr(&mut it.lhs);
 
-        let mut args = vec![lhs_ty.clone().ptr_to()];
+        let mut args = vec![];
         for arg in it.args.iter_mut() {
             args.push(self.visit_expr(arg));
         }
         
+        if lhs_ty.ptr != 1 {
+            self.errs.push(
+                TypeError {
+                    err: TypeErrorKind::MethodCallOnPrimitive { ty: lhs_ty.clone() },
+                    span: it.lhs.span.clone(),
+                    ty: lhs_ty.clone()
+                }
+            );
+            return Ty::error()
+        }
+
         let struct_name = match lhs_ty.kind.clone() {
             TyKind::Struct(id) => id,
             _ => {
@@ -594,7 +605,7 @@ impl TypeChecker {
 
         let mut depth = 0;
         let mut min_conformity = u64::MAX;
-        let mut conforming_struct = self.structs.get(&struct_name).map(|r| (*r).clone());
+        let mut conforming_struct = self.structs.get(&struct_name).map(|r| (*r).clone()).unwrap();
         let mut conforming_indices = vec![];
         let mut cur_struct = Some(struct_name);
         while let Some(name) = cur_struct.clone() {
@@ -607,7 +618,7 @@ impl TypeChecker {
                             if conformity < min_conformity {
                                 conforming_indices.clear();
                                 min_conformity = conformity;
-                                conforming_struct = self.structs.get(&struct_name).map(|r| (*r).clone());
+                                conforming_struct = self.structs.get(&struct_name).map(|r| (*r).clone()).unwrap();
                             }
                             conforming_indices.push((it.method_name, i));
                         }
@@ -648,8 +659,8 @@ impl TypeChecker {
             },
             Ordering::Equal => {
                 let (method_name, index) = conforming_indices[0].clone();
-                it.f = Some((Ty::new(TyKind::Struct(conforming_struct)), index));
-                conforming_struct.unwrap().methods[&method_name][index].return_type.clone()
+                it.f = Some((conforming_struct.name, index));
+                conforming_struct.methods[&method_name][index].return_type.clone()
             },
         }
     }

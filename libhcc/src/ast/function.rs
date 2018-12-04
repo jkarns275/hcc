@@ -1,5 +1,5 @@
-use ast::ty::Ty;
-use ast::id::Id;
+use ast::ty::{Ty, TyKind};
+use ast::id::{IdStore, Id};
 use std::collections::HashMap;
 use ast::statement::Body;
 use parser::Rule;
@@ -10,6 +10,7 @@ use ast::declaration::Declaration;
 use ast::expr::*;
 use visitors::typecheck::*;
 use ast::PosSpan;
+use std::cell::RefCell;
 
 pub struct Function {
     pub name: Id,
@@ -20,11 +21,11 @@ pub struct Function {
     /// Id of the Struct
     pub method: Option<Id>,
     pub span: PosSpan,
-    pub vtable_signature: Option<String>,
+    pub vtable_signature: RefCell<Option<String>>,
 }
 
 impl Function {
-    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Function, AstError> {
         debug_assert!(pair.as_rule() == Rule::function_definition || pair.as_rule() == Rule::function_header);
         let span = pair.as_span();
@@ -44,7 +45,7 @@ impl Function {
                 method,
                 body,
                 span: PosSpan::from_span(span),
-                vtable_signature: None,
+                vtable_signature: RefCell::new(None),
             })
         } else {
             // Just a function header
@@ -56,12 +57,12 @@ impl Function {
                 body: None,
                 method,
                 span: PosSpan::from_span(span),
-                vtable_signature: None,
+                vtable_signature: RefCell::new(None),
             })
         }
     }
 
-    fn name_and_args_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    fn name_and_args_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<(Id, Option<Id>, HashMap<Id, Declaration>, Vec<Id>, usize), AstError> {
         debug_assert!(pair.as_rule() == Rule::function_declarator);
         let span = pair.as_span();
@@ -118,7 +119,7 @@ impl Function {
         }
     }
 
-    fn return_type_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    fn return_type_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Ty, AstError> {
         debug_assert!(pair.as_rule() == Rule::declaration_specifiers);
         let span = pair.as_span();
@@ -160,7 +161,7 @@ impl Function {
         true
     }
 
-    pub fn fn_ptr_decl(&self, fn_name: Id, idstore: IdStore) -> String {
+    pub fn fn_ptr_decl(&self, fn_name: Id, idstore: &IdStore) -> String {
         let name_and_return_type = format!("{} (*{})", self.return_type.to_code(idstore), idstore.get_str(fn_name));
         let args = {
             let mut s = String::new();
@@ -169,7 +170,7 @@ impl Function {
             } else {
                 let mut s = String::new();
                 for arg in self.arg_order.iter() {
-                    s.push(format!("{}, ", self.args[arg].to_code(idstore)).as_str());
+                    s.push_str(format!("{}, ", self.args[arg].ty.to_code(idstore)).as_str());
                 }
                 s.pop();
                 s.pop();
@@ -182,14 +183,14 @@ impl Function {
     pub fn method_ptr_decl(&self, struct_name: Id, method_name: Id, idstore: &IdStore) -> String {
         let name_and_return_type = format!("{} (*{})", self.return_type.to_code(idstore), idstore.get_str(method_name));
         let args = {
-            let mut s = Ty::new(TyKind::Struct(struct_name)).ptr_to().to_code(idsore);
+            let mut s = Ty::new(TyKind::Struct(struct_name)).ptr_to().to_code(idstore);
             if self.arg_order.len() == 0 {
                 s
             } else {
                 s.push_str(", ");
                 let mut s = String::new();
                 for arg in self.arg_order.iter() {
-                    s.push(format!("{}, ", self.args[arg].to_code(idstore)).as_str());
+                    s.push_str(format!("{}, ", self.args[arg].ty.to_code(idstore)).as_str());
                 }
                 s.pop();
                 s.pop();
@@ -202,14 +203,15 @@ impl Function {
     pub fn signature(&self, idstore: &IdStore) -> String {
         let mut s = String::new();
         for arg in self.arg_order.iter() {
-            let ty = self.args[arg].clone();
-            s.push(ty.ptr.to_string())
+            let ty = self.args[arg].ty.clone();
+            s.push_str(ty.ptr.to_string().as_str());
             s.push_str(
-                match self.args[arg].clone().kind {
+                match self.args[arg].ty.clone().kind {
                     TyKind::I0 => "i0",
                     TyKind::I8 => "i8",
                     TyKind::I64 => "i64",
                     TyKind::Struct(name) => idstore.get_str(name),
+                    _ => panic!("Stop")
                 }
             );
         }
@@ -217,9 +219,12 @@ impl Function {
     }
 
     pub fn vtable_signature(&self, idstore: &IdStore) -> String {
-        if let Some(s) = self.vtable_signature.clone() { return s }
-        let mut s = "vtable_".to_owned() + self.signature(idstore);
-        self.vtable_signature = Some(s);
-        self.vtable_signature.clone().unwrap()
+        if let Some(s) = self.vtable_signature.replace(None) {
+            self.vtable_signature.replace(Some(s.clone()));
+            return s
+        }
+        let s = "vtable_".to_owned() + self.signature(idstore).as_str();
+        self.vtable_signature.replace(Some(s.clone()));
+        s
     }
 }

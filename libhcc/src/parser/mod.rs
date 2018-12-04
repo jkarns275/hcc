@@ -53,11 +53,8 @@ fn parse_linemarker(linemarker: &str) -> String {
                 return string;
             }
             string.push(ch);
-        } else {
-            if ch == '"' {
-                in_quote = true;
-                continue
-            }
+        } else if ch == '"' {
+            in_quote = true;
         }
     }
     string
@@ -89,7 +86,7 @@ pub fn remove_line_markers(s: String) -> (String, Vec<String>, LineInfo) {
 use self::Rule::*;
 use pest::error::*;
 
-const ERROR_HINTS: &'static [(&'static [Rule], &'static str)] = &[
+const ERROR_HINTS: &[(&[Rule], &str)] = &[
     (&[gt, lt, gte, lte, equals, neq, lsh, rsh, struct_deref_op, postfix_index, postfix_call, postfix_dot, assign_operator],
     "Are you missing a semicolon or an arithmetic operator?"),
     (&[sizeof_expr, mul_expr],

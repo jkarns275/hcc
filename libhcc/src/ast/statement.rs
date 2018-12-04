@@ -19,7 +19,7 @@ pub struct Body {
 }
 
 impl Body {
-    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Body, AstError> {
         debug_assert!(pair.as_rule() == Rule::compound_stmt);
         let mut pairs = pair.into_inner();
@@ -52,7 +52,7 @@ pub struct IfStmt {
 }
 
 impl IfStmt {
-    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<IfStmt, AstError> {
         debug_assert!(pair.as_rule() == Rule::selection_stmt);
         let span = pair.as_span();
@@ -75,7 +75,7 @@ pub struct WhileStmt {
 }
 
 impl WhileStmt {
-    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Statement, AstError> {
         debug_assert!(pair.as_rule() == Rule::iteration_stmt);
         let span = pair.as_span();
@@ -93,7 +93,7 @@ impl WhileStmt {
         }
     }
 
-    fn for_from_pairs<'r>(mut pairs: Pairs<'r, Rule>, span: Span<'r>, context: &mut Context<'r>)
+    fn for_from_pairs<'r>(mut pairs: Pairs<'r, Rule>, span: Span<'r>, context: &mut Context)
         -> Result<Statement, AstError> {
         let first = WhileStmt::for_first(expect!(pairs, Rule::for_first, "for first", span),
                                          context)?;
@@ -130,7 +130,7 @@ impl WhileStmt {
         Ok(Statement::Body(box rbody))
     }
 
-    fn for_first<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    fn for_first<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Option<Vec<Declaration>>, AstError> {
         debug_assert!(pair.as_rule() == Rule::for_first);
         let mut pairs = pair.into_inner();
@@ -141,7 +141,7 @@ impl WhileStmt {
         }
     }
 
-    fn for_second<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    fn for_second<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::for_second);
         let span = pair.as_span();
@@ -157,7 +157,7 @@ impl WhileStmt {
         }
     }
 
-    fn for_third<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    fn for_third<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Option<Expr>, AstError> {
         debug_assert!(pair.as_rule() == Rule::for_third);
         let mut pairs = pair.into_inner();
@@ -168,7 +168,7 @@ impl WhileStmt {
         }
     }
 
-    fn while_from_pairs<'r>(mut pairs: Pairs<'r, Rule>, span: Span<'r>, context: &mut Context<'r>)
+    fn while_from_pairs<'r>(mut pairs: Pairs<'r, Rule>, span: Span<'r>, context: &mut Context)
         -> Result<Statement, AstError> {
         let expr = expect!(pairs, Rule::expr, "expr", span);
         let cond = Expr::from_pair(expr, context)?;
@@ -185,7 +185,7 @@ pub enum JumpStmt {
 }
 
 impl JumpStmt {
-    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<JumpStmt, AstError> {
         debug_assert!(pair.as_rule() == Rule::jump_stmt);
         let span = pair.as_span();
@@ -219,7 +219,7 @@ pub enum Statement {
 }
 
 impl Statement {
-    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context<'r>)
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
         -> Result<Statement, AstError> {
         debug_assert!(pair.as_rule() == Rule::stmt);
         let span = pair.as_span();

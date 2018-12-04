@@ -6,14 +6,14 @@ use ast::function::Function;
 use std::rc::Rc;
 use ast::AstError;
 
-pub struct Context<'r> {
+pub struct Context {
     pub structs: HashMap<Id, Rc<Structure>>,
-    pub idstore: IdStore<'r>,
+    pub idstore: IdStore,
     pub functions: HashMap<Id, Vec<Rc<Function>>>,
     pub errors: Vec<AstError>
 }
 
-impl<'r> Context<'r> {
+impl Context {
     pub fn new() -> Self {
         Context {
             structs: HashMap::new(),

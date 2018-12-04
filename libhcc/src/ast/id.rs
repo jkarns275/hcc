@@ -16,11 +16,10 @@ impl IdStore {
         }
     }
 
-    pub fn get_id<S: Into<Sting>>(&mut self, s: S) -> Id {
+    pub fn get_id<S: Into<String>>(&mut self, s: S) -> Id {
         let s = s.into();
         if self.map.contains_key(&s) {
-            let id = self.map[s];
-            id
+            self.map[&s]
         } else {
             let id = self.ids.len();
             self.ids.push(s.clone());
