@@ -14,7 +14,12 @@ pub struct LineInfo {
 }
 
 impl LineInfo {
-    pub fn new() -> Self { LineInfo { ranges: vec![], filenames: vec![] } }
+    pub fn new() -> Self {
+        LineInfo {
+            ranges: vec![],
+            filenames: vec![],
+        }
+    }
     pub fn add_file(&mut self, filename: &str, start_line: usize, end_line: usize) {
         let ind = self.filenames.len();
         if start_line != end_line {
@@ -25,7 +30,7 @@ impl LineInfo {
     pub fn get_file_and_line_start<'a>(&'a self, line_number: usize) -> Option<(&'a str, usize)> {
         for &(start, end, index) in self.ranges.iter() {
             if line_number >= start && line_number < end {
-                return Some((&self.filenames[index][..], start))
+                return Some((&self.filenames[index][..], start));
             }
         }
         None
@@ -39,8 +44,10 @@ pub fn apply_pre_processor(file: &str, working_dir: &str) -> (String, Vec<String
             .arg(file)
             .current_dir(working_dir)
             .output()
-            .unwrap().stdout[..])
-        .to_string();
+            .unwrap()
+            .stdout[..],
+    )
+    .to_string();
     remove_line_markers(result)
 }
 
@@ -87,16 +94,44 @@ use self::Rule::*;
 use pest::error::*;
 
 const ERROR_HINTS: &[(&[Rule], &str)] = &[
-    (&[gt, lt, gte, lte, equals, neq, lsh, rsh, struct_deref_op, postfix_index, postfix_call, postfix_dot, assign_operator],
-    "Are you missing a semicolon or an arithmetic operator?"),
-    (&[sizeof_expr, mul_expr],
-    "Are you missing an arithmetic operator?"),
-    (&[declaration_specifiers, storage_class_specifier, type_specifier],
-    "Are you missing a type specifier?"),
-    (&[gt, lt, gte, lte, equals, neq, lsh, rsh, assign_operator],
-    "Are you missing a right-paren?"),
-    (&[abstract_declarator],
-    "Are you missing a right-paren or missing a complete type specifier?")
+    (
+        &[
+            gt,
+            lt,
+            gte,
+            lte,
+            equals,
+            neq,
+            lsh,
+            rsh,
+            struct_deref_op,
+            postfix_index,
+            postfix_call,
+            postfix_dot,
+            assign_operator,
+        ],
+        "Are you missing a semicolon or an arithmetic operator?",
+    ),
+    (
+        &[sizeof_expr, mul_expr],
+        "Are you missing an arithmetic operator?",
+    ),
+    (
+        &[
+            declaration_specifiers,
+            storage_class_specifier,
+            type_specifier,
+        ],
+        "Are you missing a type specifier?",
+    ),
+    (
+        &[gt, lt, gte, lte, equals, neq, lsh, rsh, assign_operator],
+        "Are you missing a right-paren?",
+    ),
+    (
+        &[abstract_declarator],
+        "Are you missing a right-paren or missing a complete type specifier?",
+    ),
 ];
 
 pub fn parse<'r>(src: &'r str) -> Result<Pairs<'r, Rule>, (String, (usize, usize))> {
@@ -104,30 +139,38 @@ pub fn parse<'r>(src: &'r str) -> Result<Pairs<'r, Rule>, (String, (usize, usize
         Ok(pairs) => Ok(pairs),
         Err(e) => {
             // let start_pos = match &e.location {
-                // InputLocation::Pos(p) => *p,
-                // InputLocation::Span((start, _end)) => *start,
+            // InputLocation::Pos(p) => *p,
+            // InputLocation::Span((start, _end)) => *start,
             // };
             // let position = pest::Position::new(&src[..], start_pos).unwrap();
             // let (line, col) = position.line_col();
-            Err((match &e.variant {
-                ErrorVariant::ParsingError { positives, negatives: _s } => {
-                    let mut msg = None;
-                    for (rules, err_msg) in ERROR_HINTS {
-                        if *positives == *rules {
-                            msg = Some(err_msg);
-                            break
+            Err((
+                match &e.variant {
+                    ErrorVariant::ParsingError {
+                        positives,
+                        negatives: _s,
+                    } => {
+                        let mut msg = None;
+                        for (rules, err_msg) in ERROR_HINTS {
+                            if *positives == *rules {
+                                msg = Some(err_msg);
+                                break;
+                            }
+                        }
+                        match msg {
+                            None => format!("Expected one of: {:?}; {:?}", positives, _s),
+                            Some(err_msg) => {
+                                format!("Hint: {}\n  Expected one of: {:?}", err_msg, positives)
+                            }
                         }
                     }
-                    match msg {
-                        None => format!("Expected one of: {:?}; {:?}", positives, _s),
-                        Some(err_msg) => format!("Hint: {}\n  Expected one of: {:?}", err_msg, positives)
-                    }
+                    ErrorVariant::CustomError { message } => message.to_string(),
                 },
-                ErrorVariant::CustomError { message } => message.to_string(),
-            }, match e.location {
-                InputLocation::Pos(a) => (a, a),
-                InputLocation::Span((a, b)) => (a, b),
-            }))
+                match e.location {
+                    InputLocation::Pos(a) => (a, a),
+                    InputLocation::Span((a, b)) => (a, b),
+                },
+            ))
         }
     }
 }

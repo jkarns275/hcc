@@ -4,10 +4,10 @@ use pest::*;
 extern crate libhcc;
 use libhcc::{ast, parser, visitors::*};
 
-use typecheck::*;
+use ast::*;
 use codegen::*;
 use parser::*;
-use ast::*;
+use typecheck::*;
 
 #[repr(u8)]
 #[derive(Copy, Clone)]
@@ -24,31 +24,41 @@ pub enum Color {
 }
 
 impl Color {
-    pub fn as_fg(self) -> u8 { self as u8 + 30 }
-    pub fn as_bg(self) -> u8 { self as u8 + 40 }
+    pub fn as_fg(self) -> u8 {
+        self as u8 + 30
+    }
+    pub fn as_bg(self) -> u8 {
+        self as u8 + 40
+    }
 }
 
 #[derive(Copy, Clone)]
 pub enum NotiType {
-    Error, Warning, Note, Verbose,
+    Error,
+    Warning,
+    Note,
+    Verbose,
 }
 
 impl NotiType {
     pub fn as_ansi_colors(self) -> (u8, u8) {
-        (match self {
-            NotiType::Error    => Color::Red.as_fg(),
-            NotiType::Warning  => Color::Yellow.as_fg(),
-            NotiType::Note     => Color::Cyan.as_fg(),
-            NotiType::Verbose  => Color::Magenta.as_fg(),
-        }, Color::Default.as_bg())
+        (
+            match self {
+                NotiType::Error => Color::Red.as_fg(),
+                NotiType::Warning => Color::Yellow.as_fg(),
+                NotiType::Note => Color::Cyan.as_fg(),
+                NotiType::Verbose => Color::Magenta.as_fg(),
+            },
+            Color::Default.as_bg(),
+        )
     }
 
     pub fn as_str(self) -> &'static str {
         match self {
-            NotiType::Error    => "error",
-            NotiType::Warning  => "warning",
-            NotiType::Note     => "note",
-            NotiType::Verbose  => "verbose",
+            NotiType::Error => "error",
+            NotiType::Warning => "warning",
+            NotiType::Note => "note",
+            NotiType::Verbose => "verbose",
         }
     }
 }
@@ -56,11 +66,17 @@ impl NotiType {
 const CSI: &'static str = "\x1b[";
 
 macro_rules! set_color {
-    ( $fg:expr, $bg:expr ) => ({ print!("{}{}m", CSI, $fg); print!("{}{}m", CSI, $bg); })
+    ( $fg:expr, $bg:expr ) => {{
+        print!("{}{}m", CSI, $fg);
+        print!("{}{}m", CSI, $bg);
+    }};
 }
 
 macro_rules! reset_color {
-    () => ({ print!("{}{}m", CSI, Color::Default.as_fg()); print!("{}{}m", CSI, Color::Default.as_bg()); })
+    () => {{
+        print!("{}{}m", CSI, Color::Default.as_fg());
+        print!("{}{}m", CSI, Color::Default.as_bg());
+    }};
 }
 
 pub struct NotiPrinter {
@@ -71,10 +87,14 @@ pub struct NotiPrinter {
 
 impl NotiPrinter {
     pub fn print_noti(&self, noti_type: NotiType, span: PosSpan, noti_msg: &str) {
-        let (line, col) = Span::new(self.program_text.as_str(), span.start, span.end).unwrap()
-            .start_pos().line_col();
-        let (endline, endcol) = Span::new(self.program_text.as_str(), span.start, span.end).unwrap()
-            .end_pos().line_col();
+        let (line, col) = Span::new(self.program_text.as_str(), span.start, span.end)
+            .unwrap()
+            .start_pos()
+            .line_col();
+        let (endline, endcol) = Span::new(self.program_text.as_str(), span.start, span.end)
+            .unwrap()
+            .end_pos()
+            .line_col();
         let (filename, linestart) = self.line_info.get_file_and_line_start(line).unwrap();
         let line_n_str = (line - linestart).to_string();
         let indent = " ".repeat(line_n_str.len() + 2);
@@ -87,11 +107,12 @@ impl NotiPrinter {
         println!("{}---> {}:{}:{}", indent, filename, line_n_str, col);
         println!("{}|", indent);
         println!(" {} |  {}", line_n_str, &self.lines[line - 1][..]);
-        println!("{}|  {}{}\n{}|", indent, " ".to_string().repeat(col - 1), 
+        println!(
+            "{}|  {}{}\n{}|",
+            indent,
+            " ".to_string().repeat(col - 1),
             match endcol - col {
-                1 | 0 => {
-                    "^".to_string()
-                },
+                1 | 0 => "^".to_string(),
                 x @ _ => {
                     let mut x = x;
                     if line != endline {
@@ -99,13 +120,14 @@ impl NotiPrinter {
                     }
                     let mut s = String::with_capacity(x);
                     s.push('^');
-                    for _ in 0..x-2 {
+                    for _ in 0..x - 2 {
                         s.push('~')
                     }
                     s.push('^');
                     s
                 }
-            }, indent
+            },
+            indent
         );
         if lines.len() > 1 {
             let (fg, bg) = NotiType::Note.as_ansi_colors();
@@ -134,9 +156,9 @@ pub fn cli_notify(err_msg: &str, noti_type: NotiType) {
 
 extern crate argparse;
 
-use argparse::*;
 use argparse::ArgumentParser;
 use argparse::StoreTrue;
+use argparse::*;
 use std::fs;
 
 fn main() {
@@ -168,7 +190,7 @@ fn main() {
         cli_notify("No source file supplied.", NotiType::Note);
         let usage = String::from_utf8_lossy(&usage).to_string();
         println!("{}", usage);
-        return
+        return;
     }
 
     {
@@ -197,34 +219,45 @@ fn main() {
                                 if verbose {
                                     cli_notify("type check ok.", NotiType::Note);
                                 }
-                                if check { return }
+                                if check {
+                                    return;
+                                }
                                 let output = CG::codegen(ast);
                                 fs::write(output_file, output).unwrap();
-                            },
+                            }
                             (Err((errors, idstore)), _warnings) => {
                                 for error in errors {
-                                    if error.ty.is_error() { continue }
-                                    let err_str = error.to_string(&lines[..], &idstore, &line_info, &src[..]);
-                                    noti_printer.print_noti(NotiType::Error, error.span, &err_str[..])
+                                    if error.ty.is_error() {
+                                        continue;
+                                    }
+                                    let err_str =
+                                        error.to_string(&lines[..], &idstore, &line_info, &src[..]);
+                                    noti_printer.print_noti(
+                                        NotiType::Error,
+                                        error.span,
+                                        &err_str[..],
+                                    )
                                 }
-                            },
+                            }
                         }
-                    },
+                    }
                     Err(e) => {
                         for error in e {
-                            noti_printer.print_noti(NotiType::Error,
-                                                        PosSpan {
-                                                            start: error.span.start,
-                                                            end: error.span.start },
-                                                        error.err_msg.as_str());
+                            noti_printer.print_noti(
+                                NotiType::Error,
+                                PosSpan {
+                                    start: error.span.start,
+                                    end: error.span.start,
+                                },
+                                error.err_msg.as_str(),
+                            );
                         }
-                    },
+                    }
                 }
-            },
+            }
             Err((string, (start, end))) => {
-                noti_printer.print_noti(NotiType::Error, PosSpan { start, end },
-                                        string.as_str());
-            },
+                noti_printer.print_noti(NotiType::Error, PosSpan { start, end }, string.as_str());
+            }
         }
     }
 }

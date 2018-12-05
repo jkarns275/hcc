@@ -1,16 +1,16 @@
-use std::collections::HashMap;
-use ast::structure::Structure;
+use ast::function::Function;
 use ast::id::Id;
 use ast::id::IdStore;
-use ast::function::Function;
-use std::rc::Rc;
+use ast::structure::Structure;
 use ast::AstError;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 pub struct Context {
     pub structs: HashMap<Id, Rc<Structure>>,
     pub idstore: IdStore,
     pub functions: HashMap<Id, Vec<Rc<Function>>>,
-    pub errors: Vec<AstError>
+    pub errors: Vec<AstError>,
 }
 
 impl Context {

@@ -1,20 +1,21 @@
-use ast::ty::{Ty, TyKind};
-use ast::id::{IdStore, Id};
-use std::collections::HashMap;
-use ast::statement::Body;
-use parser::Rule;
-use pest::iterators::Pair;
 use ast::context::Context;
-use ast::AstError;
 use ast::declaration::Declaration;
 use ast::expr::*;
-use visitors::typecheck::*;
+use ast::id::{Id, IdStore};
+use ast::statement::Body;
+use ast::ty::{Ty, TyKind};
+use ast::AstError;
 use ast::PosSpan;
+use parser::Rule;
+use pest::iterators::Pair;
 use std::cell::RefCell;
+use std::collections::HashMap;
+use visitors::typecheck::*;
 
 pub struct Function {
     pub name: Id,
     pub return_type: Ty,
+    pub intrinsic: bool,
     pub args: HashMap<Id, Declaration>,
     pub arg_order: Vec<Id>,
     pub body: Option<Body>,
@@ -25,20 +26,36 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
-        -> Result<Function, AstError> {
-        debug_assert!(pair.as_rule() == Rule::function_definition || pair.as_rule() == Rule::function_header);
+    pub fn from_pair<'r>(
+        pair: Pair<'r, Rule>,
+        context: &mut Context,
+    ) -> Result<Function, AstError> {
+        debug_assert!(
+            pair.as_rule() == Rule::function_definition || pair.as_rule() == Rule::function_header
+        );
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
-        let ret_type = expect!(pairs, Rule::declaration_specifiers, "declaration specifiers", span);
+        let ret_type = expect!(
+            pairs,
+            Rule::declaration_specifiers,
+            "declaration specifiers",
+            span
+        );
         let mut return_type = Function::return_type_from_pair(ret_type, context)?;
-        let fn_declarator = expect!(pairs, Rule::function_declarator, "function declarator", span);
-        let (name, method, args, arg_order, ptr) = Function::name_and_args_from_pair(fn_declarator, context)?;
+        let fn_declarator = expect!(
+            pairs,
+            Rule::function_declarator,
+            "function declarator",
+            span
+        );
+        let (name, method, args, arg_order, ptr) =
+            Function::name_and_args_from_pair(fn_declarator, context)?;
         return_type.ptr = ptr;
         if let Some(body) = pairs.next() {
             let body = Some(Body::from_pair(body, context)?);
             Ok(Function {
                 name,
+                intrinsic: false,
                 args,
                 arg_order,
                 return_type,
@@ -52,6 +69,7 @@ impl Function {
             Ok(Function {
                 name,
                 args,
+                intrinsic: false,
                 arg_order,
                 return_type,
                 body: None,
@@ -62,8 +80,10 @@ impl Function {
         }
     }
 
-    fn name_and_args_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
-        -> Result<(Id, Option<Id>, HashMap<Id, Declaration>, Vec<Id>, usize), AstError> {
+    fn name_and_args_from_pair<'r>(
+        pair: Pair<'r, Rule>,
+        context: &mut Context,
+    ) -> Result<(Id, Option<Id>, HashMap<Id, Declaration>, Vec<Id>, usize), AstError> {
         debug_assert!(pair.as_rule() == Rule::function_declarator);
         let span = pair.as_span();
 
@@ -79,7 +99,12 @@ impl Function {
             let _ = pairs.next().unwrap();
         }
 
-        let fn_direct_declarator = expect!(pairs, Rule::function_direct_declarator, "function_direct_declarator", span);
+        let fn_direct_declarator = expect!(
+            pairs,
+            Rule::function_direct_declarator,
+            "function_direct_declarator",
+            span
+        );
 
         let mut pairs = fn_direct_declarator.into_inner();
         let mut name = ident!(pairs, context.idstore, span);
@@ -89,7 +114,9 @@ impl Function {
                 let id = context.idstore.get_id(next.as_str());
                 method = Some(name);
                 name = id;
-                next = pairs.next().expect("Unexpected end of tokens in name_and_args_from_pair");
+                next = pairs
+                    .next()
+                    .expect("Unexpected end of tokens in name_and_args_from_pair");
             }
             let declarator_call: Pair<'r, Rule> = next;
 
@@ -105,7 +132,13 @@ impl Function {
                     let declaration = Declaration::parameter_declaration_from_pair(pair, context)?;
                     order.push(declaration.name);
                     if params.contains_key(&declaration.name) {
-                        return Err(AstError::new(format!("Name '{}' is repeated.", context.idstore.get_string(declaration.name).unwrap()), span))
+                        return Err(AstError::new(
+                            format!(
+                                "Name '{}' is repeated.",
+                                context.idstore.get_string(declaration.name).unwrap()
+                            ),
+                            span,
+                        ));
                     }
                     params.insert(declaration.name, declaration);
                 }
@@ -115,12 +148,17 @@ impl Function {
                 Ok((name, method, HashMap::new(), vec![], ptr))
             }
         } else {
-            Err(AstError::new("Unexpected end of tokens in name_and_args_from_pair", span))
+            Err(AstError::new(
+                "Unexpected end of tokens in name_and_args_from_pair",
+                span,
+            ))
         }
     }
 
-    fn return_type_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
-        -> Result<Ty, AstError> {
+    fn return_type_from_pair<'r>(
+        pair: Pair<'r, Rule>,
+        context: &mut Context,
+    ) -> Result<Ty, AstError> {
         debug_assert!(pair.as_rule() == Rule::declaration_specifiers);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
@@ -129,11 +167,10 @@ impl Function {
     }
 
     /// Returns 0 on no match, and returns a number that corresponds to the closeness
-    /// of the match if there is a match. The lower the number, the closer the match. 
-    pub fn conforms_to(&self, args: &mut [Expr], tc: &mut TypeChecker)
-        -> u64 {
-        if  self.method.is_none() && self.arg_order.len() != args.len() {
-            return 0
+    /// of the match if there is a match. The lower the number, the closer the match.
+    pub fn conforms_to(&self, args: &mut [Expr], tc: &mut TypeChecker) -> u64 {
+        if self.method.is_none() && self.arg_order.len() != args.len() {
+            return 0;
         }
         let mut conformity = 1;
         for (argid, supplied) in self.arg_order.iter().zip(args.iter_mut()) {
@@ -144,7 +181,7 @@ impl Function {
 
             let arg_conformity = sup_ty.conforms_to_mag(arg_ty, tc);
             if arg_conformity == 0 {
-                return 0
+                return 0;
             }
             conformity += arg_conformity;
         }
@@ -152,17 +189,28 @@ impl Function {
     }
 
     pub fn header_equals(&self, other: &Function) -> bool {
-        if self.arg_order.len() != other.arg_order.len() { return false }
-        for (a, b) in self.arg_order.as_slice().iter().zip(other.arg_order.as_slice().iter()) {
+        if self.arg_order.len() != other.arg_order.len() {
+            return false;
+        }
+        for (a, b) in self
+            .arg_order
+            .as_slice()
+            .iter()
+            .zip(other.arg_order.as_slice().iter())
+        {
             if self.args[a].ty != other.args[b].ty {
-                return false
+                return false;
             }
         }
         true
     }
 
     pub fn fn_ptr_decl(&self, fn_name: Id, idstore: &IdStore) -> String {
-        let name_and_return_type = format!("{} (*{})", self.return_type.to_code(idstore), idstore.get_str(fn_name));
+        let name_and_return_type = format!(
+            "{} (*{})",
+            self.return_type.to_code(idstore),
+            idstore.get_str(fn_name)
+        );
         let args = {
             let s = String::new();
             if self.arg_order.len() == 0 {
@@ -181,9 +229,15 @@ impl Function {
     }
 
     pub fn method_ptr_decl(&self, struct_name: Id, method_name: Id, idstore: &IdStore) -> String {
-        let name_and_return_type = format!("{} (*{})", self.return_type.to_code(idstore), idstore.get_str(method_name));
+        let name_and_return_type = format!(
+            "{} (*{})",
+            self.return_type.to_code(idstore),
+            idstore.get_str(method_name)
+        );
         let args = {
-            let mut s = Ty::new(TyKind::Struct(struct_name)).ptr_to().to_code(idstore);
+            let mut s = Ty::new(TyKind::Struct(struct_name))
+                .ptr_to()
+                .to_code(idstore);
             if self.arg_order.len() == 0 {
                 s
             } else {
@@ -205,15 +259,13 @@ impl Function {
         for arg in self.arg_order.iter() {
             let ty = self.args[arg].ty.clone();
             s.push_str(ty.ptr.to_string().as_str());
-            s.push_str(
-                match self.args[arg].ty.clone().kind {
-                    TyKind::I0 => "i0",
-                    TyKind::I8 => "i8",
-                    TyKind::I64 => "i64",
-                    TyKind::Struct(name) => idstore.get_str(name),
-                    _ => panic!("Stop")
-                }
-            );
+            s.push_str(match self.args[arg].ty.clone().kind {
+                TyKind::I0 => "i0",
+                TyKind::I8 => "i8",
+                TyKind::I64 => "i64",
+                TyKind::Struct(name) => idstore.get_str(name),
+                _ => panic!("Stop"),
+            });
         }
         s
     }
@@ -221,7 +273,7 @@ impl Function {
     pub fn vtable_signature(&self, idstore: &IdStore) -> String {
         if let Some(s) = self.vtable_signature.replace(None) {
             self.vtable_signature.replace(Some(s.clone()));
-            return s
+            return s;
         }
         let s = "vtable_".to_owned() + self.signature(idstore).as_str();
         self.vtable_signature.replace(Some(s.clone()));

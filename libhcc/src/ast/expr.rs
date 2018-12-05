@@ -105,10 +105,7 @@ impl Into<&'static str> for MulOp {
 }
 
 impl MulOp {
-    pub fn from_pair<'r>(
-        pair: Pair<'r, Rule>,
-        _context: &mut Context,
-    ) -> Result<Self, AstError> {
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, _context: &mut Context) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::mul_operator);
         Ok(match pair.as_str() {
             "/" => MulOp::Mul,
@@ -134,10 +131,7 @@ impl Into<&'static str> for AddOp {
 }
 
 impl AddOp {
-    pub fn from_pair<'r>(
-        pair: Pair<'r, Rule>,
-        _context: &mut Context,
-    ) -> Result<Self, AstError> {
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, _context: &mut Context) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::add_operator);
         Ok(match pair.as_str() {
             "+" => AddOp::Add,
@@ -161,16 +155,13 @@ impl Into<&'static str> for CmpOp {
             CmpOp::Lt => "<",
             CmpOp::Lte => "<=",
             CmpOp::Gt => ">",
-            CmpOp::Gte => ">="
+            CmpOp::Gte => ">=",
         }
     }
 }
 
 impl CmpOp {
-    pub fn from_pair<'r>(
-        pair: Pair<'r, Rule>,
-        _context: &mut Context,
-    ) -> Result<Self, AstError> {
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, _context: &mut Context) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::cmp_operator);
         Ok(match pair.as_str() {
             ">" => CmpOp::Gt,
@@ -211,16 +202,13 @@ impl From<&'static str> for AssignOp {
             "/=" => AssignOp::Div,
             "+=" => AssignOp::Add,
             "-=" => AssignOp::Sub,
-            _ => panic!("Invalid AssignOp")
+            _ => panic!("Invalid AssignOp"),
         }
     }
 }
 
 impl AssignOp {
-    pub fn from_pair<'r>(
-        pair: Pair<'r, Rule>,
-        _context: &mut Context,
-    ) -> Result<Self, AstError> {
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, _context: &mut Context) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::assign_operator);
         Ok(match pair.as_str() {
             "=" => AssignOp::Eq,
@@ -253,16 +241,13 @@ impl From<&'static str> for EqOp {
         match s {
             "==" => EqOp::Eq,
             "!=" => EqOp::Neq,
-            _ => panic!("Invalid EqOp")
+            _ => panic!("Invalid EqOp"),
         }
     }
 }
 
 impl EqOp {
-    pub fn from_pair<'r>(
-        pair: Pair<'r, Rule>,
-        _context: &mut Context,
-    ) -> Result<Self, AstError> {
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, _context: &mut Context) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::eq_operator);
         Ok(match pair.as_str() {
             "==" => EqOp::Eq,
@@ -274,10 +259,7 @@ impl EqOp {
 
 struct IntLit;
 impl IntLit {
-    pub fn from_pair<'r>(
-        pair: Pair<'r, Rule>,
-        _context: &mut Context,
-    ) -> Result<Expr, AstError> {
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, _context: &mut Context) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::int_lit);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
@@ -305,10 +287,7 @@ impl IntLit {
 
 struct PrimaryExpr;
 impl PrimaryExpr {
-    pub fn from_pair<'r>(
-        pair: Pair<'r, Rule>,
-        context: &mut Context,
-    ) -> Result<Expr, AstError> {
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::primary_expr);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
@@ -335,10 +314,10 @@ impl PrimaryExpr {
                                 expr: ExprKind::New(ty),
                                 ty: None,
                             }
-                        },
-                        _ => unreachable!("Something is wrong with primary_expr new subrule")
+                        }
+                        _ => unreachable!("Something is wrong with primary_expr new subrule"),
                     }
-                },
+                }
                 _ => unreachable!("Something is wrong with primary_expr rule"),
             })
         } else {
@@ -352,10 +331,7 @@ impl PrimaryExpr {
 
 struct PostfixExpr;
 impl PostfixExpr {
-    pub fn from_pair<'r>(
-        pair: Pair<'r, Rule>,
-        context: &mut Context,
-    ) -> Result<Expr, AstError> {
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::postfix_expr);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
@@ -396,14 +372,17 @@ impl PostfixExpr {
                                 fn_name: id,
                                 args,
                                 f: None,
-                                span: posspan
+                                span: posspan,
                             }),
                             ty: None,
                         }
                     } else {
-                        return Err(AstError::new("This should have been parsed as a method call!", span))
+                        return Err(AstError::new(
+                            "This should have been parsed as a method call!",
+                            span,
+                        ));
                     }
-                },
+                }
                 Rule::postfix_dot_call | Rule::postfix_deref_call => {
                     let mut pairs = next.into_inner();
                     if r == Rule::postfix_deref_call {
@@ -435,13 +414,16 @@ impl PostfixExpr {
                         }),
                         ty: None,
                     }
-                },
+                }
                 Rule::postfix_dot => {
                     let mut pairs = next.into_inner();
                     let id = ident!(pairs, context.idstore, span);
                     expr = Expr {
                         span: posspan,
-                        expr: ExprKind::Dot(box Dot { lhs: expr, field_name: id }),
+                        expr: ExprKind::Dot(box Dot {
+                            lhs: expr,
+                            field_name: id,
+                        }),
                         ty: None,
                     };
                 }
@@ -452,16 +434,14 @@ impl PostfixExpr {
                     let id = ident!(pairs, context.idstore, span);
                     expr = Expr {
                         span: posspan,
-                        expr: ExprKind::Dot(
-                            box Dot { 
-                                lhs: Expr {
-                                    span: posspan,
-                                    expr: ExprKind::Deref(box expr),
-                                    ty: None,
-                                },
-                                field_name: id,
-                            }
-                        ),
+                        expr: ExprKind::Dot(box Dot {
+                            lhs: Expr {
+                                span: posspan,
+                                expr: ExprKind::Deref(box expr),
+                                ty: None,
+                            },
+                            field_name: id,
+                        }),
                         ty: None,
                     };
                 }
@@ -481,10 +461,7 @@ enum UnaryOp {
 }
 
 impl UnaryOp {
-    pub fn from_pair<'r>(
-        pair: Pair<'r, Rule>,
-        _context: &mut Context,
-    ) -> Result<Self, AstError> {
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, _context: &mut Context) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::unary_operator);
         Ok(match pair.as_str() {
             "&" => UnaryOp::Lea,
@@ -499,10 +476,7 @@ impl UnaryOp {
 
 struct UnaryExpr;
 impl UnaryExpr {
-    pub fn from_pair<'r>(
-        pair: Pair<'r, Rule>,
-        context: &mut Context,
-    ) -> Result<Expr, AstError> {
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::unary_expr);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
@@ -570,10 +544,7 @@ impl UnaryExpr {
 
 struct CastExpr;
 impl CastExpr {
-    pub fn from_pair<'r>(
-        pair: Pair<'r, Rule>,
-        context: &mut Context,
-    ) -> Result<Expr, AstError> {
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::cast_expr);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
@@ -589,7 +560,10 @@ impl CastExpr {
                     )?;
                     Ok(Expr {
                         span: PosSpan::from_span(span),
-                        expr: ExprKind::Cast(box Cast { to: ty, expr: cast_expr }),
+                        expr: ExprKind::Cast(box Cast {
+                            to: ty,
+                            expr: cast_expr,
+                        }),
                         ty: None,
                     })
                 }
@@ -604,10 +578,7 @@ impl CastExpr {
 struct SizeofExpr;
 
 impl SizeofExpr {
-    pub fn from_pair<'r>(
-        pair: Pair<'r, Rule>,
-        context: &mut Context,
-    ) -> Result<Expr, AstError> {
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::sizeof_expr);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
@@ -663,7 +634,7 @@ pub struct Call {
 
 pub struct MethodCall {
     pub method_name: Id,
-    pub args: Vec<Expr>, 
+    pub args: Vec<Expr>,
     pub lhs: Expr,
     pub f: Option<(Id, usize)>,
 }
@@ -704,10 +675,32 @@ pub struct Expr {
 }
 
 impl Expr {
-    pub fn from_pair<'r>(
-        pair: Pair<'r, Rule>,
-        context: &mut Context,
-    ) -> Result<Expr, AstError> {
+    pub fn to_str(&self) -> &'static str {
+        match &self.expr {
+            ExprKind::Index(_) => "index",
+            ExprKind::Dot(_) => "dot",
+            ExprKind::Deref(_) => "deref",
+            ExprKind::MethodCall(_) => "method call",
+            ExprKind::Call(_) => "call",
+            ExprKind::SizeOfExpr(_) => "sizeof",
+            ExprKind::MulExpr(_) => "mulexpr",
+            ExprKind::AddExpr(_) => "addexpr",
+            ExprKind::CmpExpr(_) => "cmpexpr",
+            ExprKind::EqExpr(_) => "eqexpr",
+            /// Bitwise negation
+            ExprKind::InverseExpr(_) => "inverseexpr",
+            /// boolean negation
+            ExprKind::NotExpr(_) => "notexpr",
+            ExprKind::AssignExpr(_) => "assignexpr",
+            ExprKind::LeaExpr(_) => "leaexpr",
+            ExprKind::Cast(_) => "cast",
+            ExprKind::Ident(_) => "ident",
+            ExprKind::Number(_) => "number",
+            ExprKind::New(_) => "new",
+            ExprKind::NoOp => "nop",
+        }
+    }
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context) -> Result<Expr, AstError> {
         debug_assert!(pair.as_rule() == Rule::expr);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
@@ -734,5 +727,4 @@ impl Expr {
             })
         }
     }
-
 }

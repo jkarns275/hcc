@@ -1,13 +1,13 @@
-use std::collections::HashMap;
-use pest::iterators::Pair;
-use parser::Rule;
+use ast::context::Context;
 use ast::declarator::Declarator;
 use ast::function::Function;
-use ast::context::Context;
-use ast::AstError;
-use ast::PosSpan;
 use ast::id::Id;
 use ast::ty::*;
+use ast::AstError;
+use ast::PosSpan;
+use parser::Rule;
+use pest::iterators::Pair;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 pub struct StructField {
@@ -34,32 +34,45 @@ pub struct Structure {
 }
 
 impl Structure {
-
-    pub fn field_from_pair<'r>(pair : Pair<'r, Rule>, context: &mut Context)
-        -> Result<Vec<(Id, StructField)>, AstError> {
+    pub fn field_from_pair<'r>(
+        pair: Pair<'r, Rule>,
+        context: &mut Context,
+    ) -> Result<Vec<(Id, StructField)>, AstError> {
         debug_assert!(pair.as_rule() == Rule::field_declaration);
         let span = pair.as_span();
         let mut pairs = pair.into_inner().peekable();
-        let ty =
-            if pairs.peek().is_some() {
-                Ty::from_pair(expect!(pairs, Rule::type_specifier, "type specifier", span), context)?
-            } else {
-                return Err(AstError::new("Unexpected end of tokens.", span))
-            };
-        let declarator_list = expect!(pairs, Rule::struct_declarator_list, "struct declarator list", span);
-        let declarators =
-            Declarator::struct_declarator_list_from_pair(declarator_list, context)?;
+        let ty = if pairs.peek().is_some() {
+            Ty::from_pair(
+                expect!(pairs, Rule::type_specifier, "type specifier", span),
+                context,
+            )?
+        } else {
+            return Err(AstError::new("Unexpected end of tokens.", span));
+        };
+        let declarator_list = expect!(
+            pairs,
+            Rule::struct_declarator_list,
+            "struct declarator list",
+            span
+        );
+        let declarators = Declarator::struct_declarator_list_from_pair(declarator_list, context)?;
         let mut fields = vec![];
 
         for d in declarators.into_iter() {
-            fields.push((d.name, StructField::new(ty.clone().ptr_n_to(d.ptrs), d.span)));
+            fields.push((
+                d.name,
+                StructField::new(ty.clone().ptr_n_to(d.ptrs), d.span),
+            ));
         }
 
         Ok(fields)
     }
 
-    pub fn fields_and_methods_from_pairs<'r>(pair: Pair<'r, Rule>, context: &mut Context, name: Id)
-        -> Result<(HashMap<Id, StructField>, HashMap<Id, Vec<Function>>), AstError> {
+    pub fn fields_and_methods_from_pairs<'r>(
+        pair: Pair<'r, Rule>,
+        context: &mut Context,
+        name: Id,
+    ) -> Result<(HashMap<Id, StructField>, HashMap<Id, Vec<Function>>), AstError> {
         debug_assert!(pair.as_rule() == Rule::struct_declaration_list);
         let mut pairs = pair.into_inner();
         let mut fields = HashMap::new();
@@ -72,12 +85,15 @@ impl Structure {
                     for (id, field) in f {
                         fields.insert(id, field);
                     }
-                },
+                }
                 Rule::function_header | Rule::function_definition => {
                     let mut function = Function::from_pair(pair, context)?;
-                    function.method  = Some(name);
-                    methods.entry(function.name).or_insert_with(|| vec![]).push(function);
-                },
+                    function.method = Some(name);
+                    methods
+                        .entry(function.name)
+                        .or_insert_with(|| vec![])
+                        .push(function);
+                }
                 _ => {}
             }
         }
@@ -93,26 +109,32 @@ impl Structure {
         let name = ident!(pairs, context.idstore, span);
         Ok(if let Some(next) = pairs.next() {
             let mut parent_span = None;
-            let parent =
-                match next.as_rule() {
-                    Rule::struct_kw => {
-                        let next = pairs.next().unwrap();
-                        parent_span = Some(PosSpan::from_span(next.as_span()));
-                        let parent_name = context.idstore.get_id(next.as_str());
-                        Some(parent_name)
-                    },
-                    _ => None,
-                };
+            let parent = match next.as_rule() {
+                Rule::struct_kw => {
+                    let next = pairs.next().unwrap();
+                    parent_span = Some(PosSpan::from_span(next.as_span()));
+                    let parent_name = context.idstore.get_id(next.as_str());
+                    Some(parent_name)
+                }
+                _ => None,
+            };
             let mut next = Some(next);
             if parent.is_some() {
                 next = pairs.next();
             }
             let declarations = next.expect("Unexpected end of tokens while parsing struct.");
-            let (fields, methods)
-                = Structure::fields_and_methods_from_pairs(declarations, context, name)?;
+            let (fields, methods) =
+                Structure::fields_and_methods_from_pairs(declarations, context, name)?;
             Structure {
-                methods, fields, parent_span, parent,
-                span: PosSpan::from_span(span), empty: false, name, children: vec![], type_id: -1,
+                methods,
+                fields,
+                parent_span,
+                parent,
+                span: PosSpan::from_span(span),
+                empty: false,
+                name,
+                children: vec![],
+                type_id: -1,
             }
         } else {
             Structure {
@@ -137,7 +159,6 @@ impl Structure {
 }
 
 impl PartialEq for Structure {
-
     fn eq(&self, other: &Structure) -> bool {
         // TODO: Ensure that this is an okay way to check!
         self.name == other.name

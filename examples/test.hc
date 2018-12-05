@@ -1,11 +1,10 @@
-struct XorWowState : struct XorWowState {
-    struct test** state2, state3;
+struct XorWowState {
 
-    u0 test() { return 3; }
+    i64 test() { return 3; }
     u0 test2(i8 *c, i8 d) {
         i8 a = d;
         a *= a += a;
-        i8 b = c;
+        i8 b = *c;
         if (a < b) {
             print(1);
         } else {
@@ -13,11 +12,11 @@ struct XorWowState : struct XorWowState {
         }
 
         while (a) {
-            a -= 1 + w ;
+            a -= 1;
         }
 
-        for (i8 b = 10; b > a; b -= 1) {
-            print(b);
+        for (i8 e = 10; e > a; e -= 1) {
+            print(e);
         }
     }
 };

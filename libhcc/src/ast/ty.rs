@@ -1,7 +1,7 @@
 use ast::context::Context;
+use ast::id::Id;
 use ast::AstError;
 use ast::PosSpan;
-use ast::id::Id;
 
 use visitors::typecheck::*;
 
@@ -13,7 +13,7 @@ use pest::iterators::Pair;
 pub enum TypeCompatibility {
     None,
     CastTo(Ty),
-    Ok
+    Ok,
 }
 
 #[derive(PartialEq, Eq, Clone, Hash, Debug)]
@@ -34,32 +34,35 @@ pub struct Ty {
 use ast::id::IdStore;
 
 impl Ty {
-
     pub fn is_error(&self) -> bool {
         self.kind == TyKind::Error
     }
 
     pub fn to_code(&self, idstore: &IdStore) -> String {
         let mut t = match self.kind.clone() {
-            TyKind::I0          => "i0".to_string(),
-            TyKind::I8          => "i8".to_string(),
-            TyKind::I64         => "i64".to_string(),
-            TyKind::Struct(id)  => format!("struct _{}", idstore.get_string(id).unwrap()),
-            TyKind::Error       => panic!("Attempted to generate code for error type")
+            TyKind::I0 => "i0".to_string(),
+            TyKind::I8 => "i8".to_string(),
+            TyKind::I64 => "i64".to_string(),
+            TyKind::Struct(id) => format!("struct _{}", idstore.get_string(id).unwrap()),
+            TyKind::Error =>  "/* error */ i64".to_string() // "<error>".to_string(),
         };
-        for _ in 0..self.ptr { t.push('*') }
+        for _ in 0..self.ptr {
+            t.push('*')
+        }
         t
     }
 
     pub fn to_string(&self, idstore: &IdStore) -> String {
         let mut t = match self.kind.clone() {
-            TyKind::I0          => "i0".to_string(),
-            TyKind::I8          => "i8".to_string(),
-            TyKind::I64         => "i64".to_string(),
-            TyKind::Struct(id)  => format!("struct {}", idstore.get_string(id).unwrap()),
-            TyKind::Error       => "<error>".to_string()
+            TyKind::I0 => "i0".to_string(),
+            TyKind::I8 => "i8".to_string(),
+            TyKind::I64 => "i64".to_string(),
+            TyKind::Struct(id) => format!("struct {}", idstore.get_string(id).unwrap()),
+            TyKind::Error => "<error>".to_string(),
         };
-        for _ in 0..self.ptr { t.push('*') }
+        for _ in 0..self.ptr {
+            t.push('*')
+        }
         t
     }
 
@@ -68,7 +71,10 @@ impl Ty {
     }
 
     pub fn error() -> Self {
-        Ty { kind: TyKind::Error, ptr: 0 }
+        Ty {
+            kind: TyKind::Error,
+            ptr: 0,
+        }
     }
 
     pub fn ptr_to(mut self) -> Ty {
@@ -91,16 +97,14 @@ impl Ty {
 
     pub fn is_integral_type(&self) -> bool {
         match self.kind {
-            TyKind::I8 | TyKind::I64 => {
-                true
-            },
+            TyKind::I8 | TyKind::I64 => true,
             _ => false,
         }
     }
 
     pub fn conforms_to_mag(&self, other: Ty, tc: &TypeChecker) -> u64 {
         let conformity;
-        
+
         match (self.kind.clone(), other.kind.clone()) {
             (TyKind::Error, _) => 1,
             (_, TyKind::Error) => 1,
@@ -108,57 +112,54 @@ impl Ty {
                 conformity = 1;
                 loop {
                     if self_name == other_name {
-                        return conformity
+                        return conformity;
                     }
 
                     if let Some(parent_name) = tc.structs[&self_name].parent.clone() {
                         self_name = parent_name;
                     } else {
-                        return 0
+                        return 0;
                     }
                 }
-            },
-            _ => 
-                if self.kind == other.kind || (self.is_integral_type() && other.is_integral_type()) { 1 } 
-                else { 0 },
+            }
+            _ => {
+                if self.kind == other.kind || (self.is_integral_type() && other.is_integral_type())
+                {
+                    1
+                } else {
+                    0
+                }
+            }
         }
     }
 
     pub fn compatibility_with(&self, other: &Ty) -> TypeCompatibility {
         match (self.ptr == 0, other.ptr == 0) {
-            (true, true) => {
-                match (self.kind.clone(), other.kind.clone()) {
-                    (TyKind::Struct(exp), TyKind::Struct(got_name)) => {
-                        if exp == got_name {
-                            TypeCompatibility::Ok
-                        } else {
-                            TypeCompatibility::None
-                        }
-                    },
-                    (TyKind::I64, TyKind::I64)  => TypeCompatibility::Ok,
-                    (TyKind::I8, TyKind::I8)    => TypeCompatibility::Ok,
-                    (TyKind::I64, TyKind::I8)   => TypeCompatibility::CastTo(Ty::new(TyKind::I64)),
-                    (TyKind::I8, TyKind::I64)   => TypeCompatibility::CastTo(Ty::new(TyKind::I8)),
-                    (_, _) => TypeCompatibility::None,
+            (true, true) => match (self.kind.clone(), other.kind.clone()) {
+                (TyKind::Struct(exp), TyKind::Struct(got_name)) => {
+                    if exp == got_name {
+                        TypeCompatibility::Ok
+                    } else {
+                        TypeCompatibility::None
+                    }
                 }
+                (TyKind::I64, TyKind::I64) => TypeCompatibility::Ok,
+                (TyKind::I8, TyKind::I8) => TypeCompatibility::Ok,
+                (TyKind::I64, TyKind::I8) => TypeCompatibility::CastTo(Ty::new(TyKind::I64)),
+                (TyKind::I8, TyKind::I64) => TypeCompatibility::CastTo(Ty::new(TyKind::I8)),
+                (_, _) => TypeCompatibility::None,
             },
-            (true, false) => {
-                match self.kind.clone() {
-                    TyKind::Struct(_) => TypeCompatibility::None,
-                    TyKind::I64 => TypeCompatibility::CastTo(Ty::new(TyKind::I64)),
-                    TyKind::I8 => TypeCompatibility::CastTo(Ty::new(TyKind::I8)),
-                    _ => TypeCompatibility::None,
-                }
+            (true, false) => match self.kind.clone() {
+                TyKind::Struct(_) => TypeCompatibility::None,
+                TyKind::I64 => TypeCompatibility::CastTo(Ty::new(TyKind::I64)),
+                TyKind::I8 => TypeCompatibility::CastTo(Ty::new(TyKind::I8)),
+                _ => TypeCompatibility::None,
             },
-            (false, true) => {
-                match other.kind.clone() {
-                    TyKind::I64 | TyKind::I8 => TypeCompatibility::CastTo(self.clone()),
-                    _ => TypeCompatibility::None,
-                }
+            (false, true) => match other.kind.clone() {
+                TyKind::I64 | TyKind::I8 => TypeCompatibility::CastTo(self.clone()),
+                _ => TypeCompatibility::None,
             },
-            (false, false) => {
-                TypeCompatibility::CastTo(self.clone())
-            },
+            (false, false) => TypeCompatibility::CastTo(self.clone()),
         }
     }
 
@@ -166,17 +167,21 @@ impl Ty {
         self.conforms_to_mag(other, tc) > 0
     }
 
-    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
-        -> Result<Ty, AstError> {
+    pub fn from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context) -> Result<Ty, AstError> {
         match pair.as_rule() {
             Rule::type_name => Self::type_name_from_pair(pair, context),
             Rule::type_specifier => Self::type_specifier_from_pair(pair, context),
-            _ => { Err(AstError::new(format!("{:?}", pair.as_rule()), pair.as_span())) },
+            _ => Err(AstError::new(
+                format!("{:?}", pair.as_rule()),
+                pair.as_span(),
+            )),
         }
     }
 
-    fn type_name_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context)
-        -> Result<Ty, AstError> {
+    fn type_name_from_pair<'r>(
+        pair: Pair<'r, Rule>,
+        context: &mut Context,
+    ) -> Result<Ty, AstError> {
         debug_assert!(pair.as_rule() == Rule::type_name);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
@@ -193,7 +198,10 @@ impl Ty {
         }
     }
 
-    fn type_specifier_from_pair<'r>(pair: Pair<'r, Rule>, context: &mut Context) -> Result<Ty, AstError> {
+    fn type_specifier_from_pair<'r>(
+        pair: Pair<'r, Rule>,
+        context: &mut Context,
+    ) -> Result<Ty, AstError> {
         debug_assert!(pair.as_rule() == Rule::type_specifier);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
@@ -206,18 +214,17 @@ impl Ty {
                     let _ = expect!(pairs, Rule::struct_kw, "struct keyword", span);
                     let struct_name = ident!(pairs, context.idstore, span);
                     Ok(Ty::new(TyKind::Struct(struct_name)))
+                }
+                Rule::void_kw => Ok(Ty::new(TyKind::I0)),
+                Rule::int_type => match r.as_str() {
+                    "i64" => Ok(Ty::new(TyKind::I64)),
+                    "i8" => Ok(Ty::new(TyKind::I8)),
+                    _ => panic!("Unsupported integer type"),
                 },
-                Rule::void_kw => {
-                    Ok(Ty::new(TyKind::I0))
-                },
-                Rule::int_type => {
-                    match r.as_str() {
-                        "i64"   => Ok(Ty::new(TyKind::I64)),
-                        "i8"    => Ok(Ty::new(TyKind::I8)),
-                        _     => panic!("Unsupported integer type"),
-                    }
-                },
-                _ => Err(AstError::new(format!("Unexpected token {:?}", r.as_rule()), span)),
+                _ => Err(AstError::new(
+                    format!("Unexpected token {:?}", r.as_rule()),
+                    span,
+                )),
             }
         } else {
             Err(AstError::new("Unexpected end of tokens in ty", span))
@@ -232,7 +239,7 @@ impl Ty {
                 } else {
                     false // self.super_has_field(name, tc).is_some()
                 }
-            } else { 
+            } else {
                 false
             }
         } else {
@@ -247,17 +254,17 @@ impl Ty {
                 if let Some(p) = s.parent.as_ref() {
                     parent = *p;
                 } else {
-                    return None
+                    return None;
                 }
             } else {
-                return None
+                return None;
             }
             if let Some(parent) = tc.structs.get(&parent) {
                 if let Some(decl) = parent.fields.get(&name) {
-                    return Some(decl.span.clone())
+                    return Some(decl.span.clone());
                 }
             } else {
-                return None
+                return None;
             }
             Ty::new(TyKind::Struct(parent)).super_has_field(name, tc)
         } else {
@@ -266,7 +273,9 @@ impl Ty {
     }
 
     pub fn inherits(&self, other: &Ty, tc: &TypeChecker) -> bool {
-        if self.ptr != other.ptr { return false }
+        if self.ptr != other.ptr {
+            return false;
+        }
         match (self.kind.clone(), other.kind.clone()) {
             (TyKind::Struct(self_st), TyKind::Struct(other)) => {
                 if self_st == other {
@@ -275,19 +284,19 @@ impl Ty {
                     let mut curr_struct = tc.structs.get(&self_st);
                     while let Some(curr) = curr_struct.clone() {
                         if curr.name == other {
-                            return true
+                            return true;
                         }
                         if let Some(parent) = curr.parent.as_ref() {
                             curr_struct = tc.structs.get(parent);
                         } else {
-                            break
+                            break;
                         }
                     }
                     false
                 }
-            },
-            _ => true
-        }   
+            }
+            _ => true,
+        }
     }
 
     pub fn has_circular_inheritence(&self, tc: &TypeChecker) -> bool {
@@ -300,14 +309,14 @@ impl Ty {
                     if let Some(p) = s.parent.clone() {
                         parents.insert(curr);
                         if parents.contains(&p) {
-                            return true
+                            return true;
                         }
                         curr = p;
                     } else {
-                        return false
+                        return false;
                     }
                 } else {
-                    return false
+                    return false;
                 }
             }
         } else {
@@ -315,4 +324,3 @@ impl Ty {
         }
     }
 }
-
