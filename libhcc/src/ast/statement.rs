@@ -163,7 +163,7 @@ impl WhileStmt {
                     ty: Some(Ty::new(TyKind::I64)),
                 })
             } else {
-                return Expr::from_expr_stmt_pair(next, context)
+                return Expr::from_expr_stmt_pair(next, context);
             }
         } else {
             Ok(Expr {

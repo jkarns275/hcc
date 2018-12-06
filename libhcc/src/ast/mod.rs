@@ -252,7 +252,7 @@ impl Ast {
             .entry(context.idstore.get_id("malloc"))
             .or_insert_with(|| vec![])
             .insert(0, Rc::new(malloc));
-        
+
         let r = if context.errors.len() != 0 {
             Err(context.errors)
         } else {

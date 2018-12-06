@@ -226,9 +226,9 @@ fn main() {
                                 fs::write(output_file, output).unwrap();
                             }
                             (Err((errors, idstore)), _warnings) => {
+                                println!("errors len: {}", errors.len());
                                 for error in errors {
                                     if error.ty.is_error() {
-                                        continue;
                                     }
                                     let err_str =
                                         error.to_string(&lines[..], &idstore, &line_info, &src[..]);

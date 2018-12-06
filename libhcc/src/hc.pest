@@ -80,7 +80,7 @@ ident = ${
     ( 'a'..'z' | 'A'..'Z' | "_" | '\u{203C}'..'\u{3299}' | '\u{1F000}'..'\u{1F644}' )
     ~ ( 'a'..'z' | 'A'..'Z' | "_" | '0'..'9' | '\u{203C}'..'\u{3299}' | '\u{1F000}'..'\u{1F644}' )* }
 
-primary_expr = { ident | int_lit | (lparen ~ expr ~ rparen) | (new_kw ~ ( type_specifier | ( lparen ~ type_name ~ rparen ) ) ) }
+primary_expr = { (new_kw ~ ( ( lparen ~ type_name ~ rparen ) | type_specifier ) ) | ident | int_lit | (lparen ~ expr ~ rparen) }
 
 postfix_deref = { struct_deref_op ~ ident }
 postfix_index = { lbrack ~ expr ~ rbrack }

@@ -234,13 +234,13 @@ pub struct TypeChecker {
     pub numeric_type_hint: Vec<Ty>,
     pub expr_span: PosSpan,
     pub this: Id,
+    pub ids: IdStore,
 }
 
 impl TypeChecker {
-    pub fn typecheck<'a>(ast: Ast) -> (Result<Ast, (Vec<TypeError>, IdStore)>, Vec<TypeWarning>) {
-        let mut idstore = ast.idstore;
-        let this = idstore.get_id("this");
-        let main = idstore.get_id("main");
+    pub fn typecheck<'a>(mut ast: Ast) -> (Result<Ast, (Vec<TypeError>, IdStore)>, Vec<TypeWarning>) {
+        let this = ast.idstore.get_id("this");
+        let main = ast.idstore.get_id("main");
         let fns = ast
             .functions
             .clone()
@@ -248,7 +248,7 @@ impl TypeChecker {
             .map(|(_, v)| v)
             .collect::<Vec<_>>();
         let structs = ast.structs.clone();
-        let mut tc = Self::new(ast.structs, ast.functions, this);
+        let mut tc = Self::new(ast.structs, ast.functions, this, ast.idstore);
 
         for fnlist in fns.into_iter() {
             for f in fnlist.into_iter() {
@@ -270,19 +270,16 @@ impl TypeChecker {
 
         if tc.errs.len() == 0 {
             let mut ast = Ast {
-                idstore,
+                idstore: tc.ids,
                 structs: tc.structs,
                 functions: tc.fns,
             };
             if let Some(ref mut a) = ast.functions.get_mut(&main) {
                 Rc::get_mut(&mut a[0]).unwrap().intrinsic = true;
             }
-            (
-                Ok(ast),
-                tc.wrns,
-            )
+            (Ok(ast), tc.wrns)
         } else {
-            (Err((tc.errs, idstore)), tc.wrns)
+            (Err((tc.errs, tc.ids)), tc.wrns)
         }
     }
 
@@ -290,6 +287,7 @@ impl TypeChecker {
         structs: HashMap<Id, Rc<Structure>>,
         fns: HashMap<Id, Vec<Rc<Function>>>,
         this: Id,
+        ids: IdStore
     ) -> Self {
         TypeChecker {
             structs,
@@ -297,6 +295,7 @@ impl TypeChecker {
             fns,
             errs: vec![],
             wrns: vec![],
+            ids,
             var_stack: VecDeque::with_capacity(8),
             numeric_type_hint: vec![Ty::new(TyKind::I64)],
             expr_span: PosSpan { start: 0, end: 0 },
@@ -441,6 +440,7 @@ impl TypeChecker {
                         ty: it.ty.clone(),
                     });
                 }
+                self.numeric_type_hint.push(Ty::new(TyKind::I64))
             }
             _ => self.numeric_type_hint.push(Ty::new(TyKind::I64)),
         };
@@ -451,6 +451,7 @@ impl TypeChecker {
             match expected.compatibility_with(&got) {
                 TypeCompatibility::Ok => expected.clone(),
                 TypeCompatibility::None => {
+                    println!("?");
                     self.errs.push(TypeError {
                         err: TypeErrorKind::WrongType {
                             got: got.clone(),
@@ -870,7 +871,11 @@ impl TypeChecker {
 
     pub fn visit_number(&mut self, _it: &mut i64) -> Ty {
         let a = self.numeric_type_hint[self.numeric_type_hint.len() - 1].clone();
-        if a.kind == TyKind::Error { Ty::new(TyKind::I64) } else { a }
+        if a.kind == TyKind::Error {
+            Ty::new(TyKind::I64)
+        } else {
+            a
+        }
     }
 
     pub fn visit_new(&mut self, it: &mut Ty) -> Ty {
@@ -883,12 +888,14 @@ impl TypeChecker {
                 });
                 Ty::error()
             }
-            _ => it.clone().ptr_to(),
+            _ => it.clone(),
         }
     }
 
     pub fn visit_function(&mut self, it: &mut Function) -> Ty {
-        if it.intrinsic || it.body.is_none() { return it.return_type.clone() }
+        if it.intrinsic || it.body.is_none() {
+            return it.return_type.clone();
+        }
         if it.body.is_none() {
             self.errs.push(TypeError {
                 err: TypeErrorKind::NoFunctionDefinition,

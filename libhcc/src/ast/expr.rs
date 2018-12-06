@@ -308,7 +308,7 @@ impl PrimaryExpr {
                     let next = pairs.next().unwrap();
                     match next.as_rule() {
                         Rule::type_specifier | Rule::type_name => {
-                            let ty = Ty::from_pair(next, context)?;
+                            let ty = Ty::from_pair(next, context)?.ptr_to();
                             Expr {
                                 span: PosSpan::from_span(span),
                                 expr: ExprKind::New(ty),

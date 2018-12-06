@@ -242,7 +242,32 @@ impl Function {
                 s
             } else {
                 s.push_str(", ");
-                let mut s = String::new();
+                for arg in self.arg_order.iter() {
+                    s.push_str(format!("{}, ", self.args[arg].ty.to_code(idstore)).as_str());
+                }
+                s.pop();
+                s.pop();
+                s
+            }
+        };
+        format!("{}({})", name_and_return_type, args)
+    }
+
+    pub fn vtable_decl(&self, struct_name: Id, name: String, idstore: &IdStore, size: usize) -> String {
+        let name_and_return_type = format!(
+            "{} (*{}[{:#x}])",
+            self.return_type.to_code(idstore),
+            name,
+            size
+        );
+        let args = {
+            let mut s = Ty::new(TyKind::Struct(struct_name))
+                .ptr_to()
+                .to_code(idstore);
+            if self.arg_order.len() == 0 {
+                s
+            } else {
+                s.push_str(", ");
                 for arg in self.arg_order.iter() {
                     s.push_str(format!("{}, ", self.args[arg].ty.to_code(idstore)).as_str());
                 }

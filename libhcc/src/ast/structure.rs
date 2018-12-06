@@ -7,7 +7,7 @@ use ast::AstError;
 use ast::PosSpan;
 use parser::Rule;
 use pest::iterators::Pair;
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 use std::rc::Rc;
 
 pub struct StructField {
@@ -28,7 +28,7 @@ pub struct Structure {
     pub name: Id,
     pub span: PosSpan,
     pub parent_span: Option<PosSpan>,
-    pub children: Vec<Id>,
+    pub children: HashSet<Id>,
     pub empty: bool,
     pub type_id: i8,
 }
@@ -133,7 +133,7 @@ impl Structure {
                 span: PosSpan::from_span(span),
                 empty: false,
                 name,
-                children: vec![],
+                children: HashSet::new(),
                 type_id: -1,
             }
         } else {
@@ -145,7 +145,7 @@ impl Structure {
                 span: PosSpan::from_span(span),
                 name,
                 empty: true,
-                children: vec![],
+                children: HashSet::new(),
                 type_id: -1,
             }
         })
@@ -153,7 +153,9 @@ impl Structure {
 
     pub fn merge(&mut self, other: Rc<Structure>) {
         assert!(other.empty);
-        self.children.append(&mut other.children.clone());
+        for child in other.children.iter() {
+            self.children.insert(*child);
+        }
         self.empty = false;
     }
 }

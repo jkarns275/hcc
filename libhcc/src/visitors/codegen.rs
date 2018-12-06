@@ -37,7 +37,7 @@ pub struct CG {
     pub output: String,
     pub fns: HashMap<Id, Vec<Rc<UnsafeCell<Function>>>>,
     pub structs: HashMap<Id, Rc<UnsafeCell<Structure>>>,
-    pub vtables: HashMap<Id, Vec<Rc<UnsafeCell<Structure>>>>,
+    pub vtables: HashMap<Id, Vec<Id>>,
     pub parents: HashMap<Id, Rc<UnsafeCell<Structure>>>,
     pub continue_stack: Vec<Label>,
     pub break_stack: Vec<Label>,
@@ -58,6 +58,14 @@ impl CG {
             }
             structs
         };
+        let mstructs = structs.clone();
+        for (name, structure) in structs.iter() {
+            let structure = unsafe { (*structure).get().as_mut().unwrap() };
+            structure.type_id = 0;
+            if let Some(parent) = structure.parent.clone() {
+                unsafe { (*mstructs[&parent]).get().as_mut().unwrap() }.type_id = 0;
+            }
+        }
         let fns = {
             let mut fns = HashMap::with_capacity(ast.functions.len());
             for (name, flist) in ast.functions {
@@ -86,23 +94,51 @@ impl CG {
             tmp_counter: 0,
         };
 
+        let header = r#"#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#define true 1
+#define false 0
+
+typedef int64_t i64;
+typedef int8_t i8;
+typedef void i0;
+
+i0 print(i64 a) {
+    printf("%ld\n", a);   
+}
+"#;
+        cg.emit(header);
+        cg.emit("\n// \n// struct headers\n//\n");
         cg.visit_struct_headers();
+        cg.emit("\n// \n// function headers\n//\n");
         cg.visit_function_headers();
 
+        cg.emit("\n// \n// method headers\n//\n");
         let structures = cg.structs.clone();
         for structure in structures.values() {
             let mut structure = unsafe { (**structure).get().as_mut() }.unwrap();
             cg.visit_method_headers(&mut *structure);
         }
-
+        
+        cg.emit("\n// \n// struct definitions\n//\n");
         for structure in structures.values() {
             let mut structure = unsafe { (**structure).get().as_mut() }.unwrap();
             cg.visit_struct(&mut *structure);
+        }
+
+        cg.emit("\n// \n// vtables\n//\n");
+        cg.visit_vtables();
+
+        cg.emit("\n// \n// method definitions\n//\n");
+        for structure in structures.values() {
+            let mut structure = unsafe { (**structure).get().as_mut() }.unwrap();
             cg.visit_methods(&mut *structure);
         }
 
+        cg.emit("\n// \n// function definitions\n//\n");
         cg.visit_functions();
-
+        println!("{}", cg.output);
         cg.output
     }
 
@@ -110,6 +146,7 @@ impl CG {
         if self.roots.contains_key(&child) {
             self.roots[&child]
         } else {
+            let mut prev = None;
             let mut par = Some(child);
             while let Some(parent) = par {
                 if unsafe { (*self.structs[&parent]).get().as_ref() }
@@ -119,9 +156,12 @@ impl CG {
                 {
                     break;
                 }
-                par = unsafe { (*self.structs[&parent]).get().as_ref() }
-                    .unwrap()
-                    .parent;
+                let mut parent = unsafe { (*self.structs[&parent]).get().as_mut() }.unwrap();
+                if let Some(child) = prev {
+                    parent.children.insert(child);
+                }
+                prev = par.clone();
+                par = parent.parent.clone();
             }
             let parent = par.unwrap();
             self.roots.insert(child, parent);
@@ -156,6 +196,16 @@ impl CG {
         }
     }
 
+    fn generate_method_name(&mut self, it: &Function, conforming_structure: Id, structure: Id) -> String {
+        format!(
+            "{}_{}_{}_{}",
+            self.ids.get_str(conforming_structure),
+            self.ids.get_str(structure),
+            self.ids.get_str(it.name),
+            it.signature(&self.ids)
+        )
+    }
+
     pub fn generate_method_header(
         &mut self,
         it: &Function,
@@ -183,13 +233,7 @@ impl CG {
         args.pop();
 
         // self.ids.get_str(it.method_name), method_signature, args
-        let method_name = format!(
-            "{}_{}_{}_{}",
-            self.ids.get_str(conforming_structure),
-            self.ids.get_str(structure),
-            self.ids.get_str(it.name),
-            it.signature(&self.ids)
-        );
+        let method_name = self.generate_method_name(it, conforming_structure, structure);
         format!(
             "{} {}({})",
             it.return_type.to_code(&self.ids),
@@ -200,6 +244,69 @@ impl CG {
 
     pub fn generate_struct_header(&mut self, it: &Structure) -> String {
         format!("struct _{}", self.ids.get_str(it.name))
+    }
+
+    /// If struct or parent struct has method.
+    fn has_method(&mut self, struct_name: Id, method_name: Id, signature: &str) -> Option<(Id, usize)> {
+        let mut par = Some(struct_name);
+        while let Some(parent_name) = par {
+            let parent = unsafe { (*self.structs[&parent_name]).get().as_ref() }
+                .unwrap();
+            if let Some(ref methods) = parent.methods.get(&method_name) {
+                for (i, method) in methods.iter().enumerate() {
+                    if method.signature(&self.ids).as_str() == signature {
+                        return Some((parent_name, i))
+                    }
+                }
+            }
+            par = parent.parent.clone();
+        }
+        None
+    }
+
+    pub fn visit_vtable(&mut self, structure: &Structure, already_generated: &mut HashSet<(Id, String)>) {
+        let root = self.get_root_struct(structure.name);
+        if !self.vtables.contains_key(&root) { return }
+        let len = self.vtables[&root].len();
+        for (method_name, method_list) in structure.methods.iter() {
+            for method in method_list.iter() {
+                let signature = method.signature(&self.ids);
+                let k = (*method_name, signature.clone());
+                if already_generated.contains(&k) {
+                    continue
+                }
+                already_generated.insert(k);
+                let vtable_signature = method.vtable_signature(&self.ids);
+                let vtable_name = format!("{}_{}_{}", self.ids.get_str(root), self.ids.get_str(method.name), vtable_signature);
+                let vtable_decl = method.vtable_decl(root, vtable_name, &self.ids, len);
+                let mut arr_elements = String::new();
+
+                for struct_name in self.vtables[&root].clone().iter() {
+                    let structure  = unsafe { (*self.structs[struct_name]).get().as_ref().unwrap() };
+                    if let Some((conforming_struct_name, index)) = self.has_method(*struct_name, method.name, signature.as_str()) {
+                        let containing_struct = unsafe { (*self.structs[&conforming_struct_name]).get().as_ref().unwrap() };
+                        let method_name = self.generate_method_name(&containing_struct.methods[&method.name][index], conforming_struct_name, *struct_name);
+                        arr_elements += format!("    &{},\n", method_name).as_str();
+                    } else {
+                        arr_elements += "    NULL,\n"
+                    }
+                }
+
+                arr_elements.pop();
+                arr_elements.pop();
+
+                self.emit(format!("{} = {{\n{}\n}};\n", vtable_decl, arr_elements));
+            }
+        }
+    }
+
+    pub fn visit_vtables(&mut self) {
+        let mut already_generated = HashSet::new();
+        for (name, structure) in self.structs.clone() {
+            let structure = unsafe { (*structure).get().as_ref().unwrap() };
+            if structure.type_id == -1 { continue }
+            self.visit_vtable(structure, &mut already_generated);
+        }
     }
 
     pub fn visit_struct_headers(&mut self) {
@@ -214,7 +321,9 @@ impl CG {
         let cloned_fns = self.fns.clone();
         for (_name, fn_list) in cloned_fns {
             for i in 0..fn_list.len() {
-                self.visit_function_header(unsafe { fn_list[i].get().as_ref() }.unwrap(), i);
+                let f = unsafe { fn_list[i].get().as_ref() }.unwrap();
+                if f.intrinsic { continue }
+                self.visit_function_header(f, i);
             }
         }
     }
@@ -271,7 +380,7 @@ impl CG {
 
     pub fn visit_struct_header(&mut self, it: &Structure) {
         let header = self.generate_struct_header(it);
-        self.emit(format!("{};", header));
+        self.emit(format!("{};\n", header));
     }
 
     pub fn visit_struct(&mut self, it: &mut Structure) {
@@ -284,7 +393,7 @@ impl CG {
             {
                 let entry = self.vtables.entry(root_parent).or_insert_with(|| vec![]);
                 let id = entry.len();
-                entry.push(self.structs[&it.name].clone());
+                entry.push(it.name);
                 it.type_id = id as i8;
             }
             self.emit(format!("    i8 type_id[4]; // Runtime type information \n"));
@@ -336,7 +445,7 @@ impl CG {
             Statement::Declaration(ref mut decl) => self.visit_declaration(decl),
         }
     }
-    
+
     fn visit_while(&mut self, it: &mut WhileStmt) -> Label {
         let loop_start = self.next_label();
         self.continue_stack.push(loop_start);
@@ -356,7 +465,7 @@ impl CG {
         self.break_stack.pop();
         loop_start
     }
-    
+
     fn visit_body(&mut self, it: &mut Body) -> Label {
         let body_start = self.next_label();
         for stmt in it.stmts.iter_mut() {
@@ -536,9 +645,9 @@ impl CG {
         let ind = it.f.clone().unwrap();
         let function = self.fns[&it.fn_name][ind].clone();
         let fn_name = self.generate_fn_name(unsafe { (*function).get().as_ref() }.unwrap(), ind);
-        
+
         if self.current_ty.kind == TyKind::I0 {
-            self.emit(format!("{}( {} );\n", fn_name, args_string));
+            self.emit(format!("    {}( {} );\n", fn_name, args_string));
             0
         } else {
             let result = self.next_tmp();
@@ -551,7 +660,6 @@ impl CG {
             ));
             result
         }
-
     }
 
     fn visit_method_call(&mut self, it: &mut MethodCall) -> Id {
@@ -579,10 +687,10 @@ impl CG {
 
         let structure_rc = self.structs[&struct_name].clone();
         let structure = unsafe { (*structure_rc).get().as_ref() }.unwrap();
-        if structure.type_id != -1 && structure.children.len() != 0 {
+        if structure.type_id != -1 {
             let tid = self.next_tmp();
             self.emit(format!(
-                "i8 {} = *((i8*) {});\n",
+                "    i8 {} = *((i8*) {});\n",
                 self.ids.get_str(tid),
                 self.ids.get_str(lhs)
             ));
@@ -599,35 +707,51 @@ impl CG {
                 )
             };
             self.emit(format!(
-                "    {} = {}_{}[{}];\n",
+                "    {} = {}_{}_{}[{}];\n",
                 method_decl,
                 self.ids.get_str(root_parent),
+                self.ids.get_str(it.method_name),
                 vtable_signature,
                 self.ids.get_str(tid)
             ));
-            self.emit(format!(
-                "    {} {} = (*{})({});\n",
-                self.current_ty.to_code(&self.ids),
-                self.ids.get_str(result),
-                self.ids.get_str(fn_ptr),
-                args_string
-            ));
+            if self.current_ty.kind == TyKind::I0 {
+                self.emit(format!(
+                    "    (*{})({});\n",
+                    self.ids.get_str(fn_ptr),
+                    args_string
+                ));
+            } else {
+                self.emit(format!(
+                    "    {} {} = (*{})({});\n",
+                    self.current_ty.to_code(&self.ids),
+                    self.ids.get_str(result),
+                    self.ids.get_str(fn_ptr),
+                    args_string
+                ));
+            }
         } else {
             let (conforming_struct, index) = it.f.clone().unwrap();
             let method_signature = unsafe { (*self.structs[&conforming_struct]).get().as_ref() }
                 .unwrap()
                 .methods[&it.method_name][index]
                 .signature(&self.ids);
-            self.emit(format!(
-                "    {} {} = {}_{}_{}_{}({});\n",
-                self.current_ty.to_code(&self.ids),
-                self.ids.get_str(result),
-                self.ids.get_str(conforming_struct),
-                self.ids.get_str(struct_name),
-                self.ids.get_str(it.method_name),
-                method_signature,
-                args_string
-            ));
+            let the_function = &unsafe { (*self.structs[&conforming_struct]).get().as_ref() }.unwrap().methods[&it.method_name][index];
+            let method_name = self.generate_method_name(the_function, conforming_struct, structure.name);
+            if self.current_ty.kind == TyKind::I0 {
+                self.emit(format!(
+                    "    {}({});\n",
+                    method_name,
+                    args_string
+                ));
+            } else {
+                self.emit(format!(
+                    "    {} {} = {}({});\n",
+                    self.current_ty.to_code(&self.ids),
+                    self.ids.get_str(result),
+                    method_name,
+                    args_string
+                ));
+            }
         }
         result
     }
@@ -949,46 +1073,12 @@ impl CG {
 
     fn visit_new(&mut self, it: &mut Ty) -> Id {
         let binding = self.next_tmp();
-        if it.ptr == 0 {
-            match it.clone().kind {
-                TyKind::I64 => self.emit(format!(
-                    "    i64* {} = (i64*) malloc(8);\n",
-                    self.ids.get_str(binding)
-                )),
-                TyKind::I8 => self.emit(format!(
-                    "    i8* {} = (i8*) malloc(1);\n",
-                    self.ids.get_str(binding)
-                )),
-                TyKind::Struct(name) => {
-                    self.emit(format!(
-                        "    struct {0}* {1} = (struct {0}*) malloc ( sizeof(struct {0}) );\n",
-                        self.ids.get_str(name),
-                        self.ids.get_str(binding)
-                    ));
-                    let type_init_code = {
-                        let structure_rc = self.structs[&name].clone();
-                        let structure = unsafe { (*structure_rc).get().as_ref() }.unwrap();
-                        if structure.type_id != -1 {
-                            Some(format!(
-                                "    {}->type_id[0] = {};\n",
-                                self.ids.get_str(binding),
-                                structure.type_id
-                            ))
-                        } else {
-                            None
-                        }
-                    };
-                    type_init_code.map(|s| self.emit(s));
-                }
-                _ => unreachable!(),
-            }
-        } else {
-            self.emit(format!(
-                "{0}* {1} = ({0}*) malloc(sizeof (void*));\n",
-                it.to_code(&self.ids),
-                self.ids.get_str(binding)
-            ));
-        }
+        self.emit(format!(
+            "{0} {1} = ({0}) malloc(sizeof ({2}));\n",
+            it.to_code(&self.ids),
+            self.ids.get_str(binding),
+            it.clone().derefed().to_code(&self.ids)
+        ));
         binding
     }
 

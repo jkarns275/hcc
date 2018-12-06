@@ -237,7 +237,7 @@ impl Ty {
                 if s.fields.contains_key(&name) {
                     true
                 } else {
-                    false // self.super_has_field(name, tc).is_some()
+                    self.super_has_field(name, tc).is_some()
                 }
             } else {
                 false
