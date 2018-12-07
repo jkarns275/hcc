@@ -138,7 +138,6 @@ i0 print(i64 a) {
 
         cg.emit("\n// \n// function definitions\n//\n");
         cg.visit_functions();
-        println!("{}", cg.output);
         cg.output
     }
 
@@ -438,8 +437,10 @@ i0 print(i64 a) {
             Statement::If(ref mut ifstmt) => self.visit_if(ifstmt.as_mut()),
             Statement::While(ref mut whilestmt) => self.visit_while(whilestmt.as_mut()),
             Statement::Expr(ref mut expr) => {
+                let lbl = self.next_label();
+                self.emit_label(lbl);
                 self.visit_expr(expr);
-                Label(0)
+                lbl
             }
             Statement::Jump(ref mut jmpstmt) => self.visit_jmp(jmpstmt),
             Statement::Declaration(ref mut decl) => self.visit_declaration(decl),
@@ -449,18 +450,21 @@ i0 print(i64 a) {
     fn visit_while(&mut self, it: &mut WhileStmt) -> Label {
         let loop_start = self.next_label();
         self.continue_stack.push(loop_start);
-        self.emit_label(loop_start);
+        self.emit(format!("    goto {};\n", loop_start));
         let loop_end = self.next_label();
         self.break_stack.push(loop_end);
+        let body_start = self.visit_stmt(&mut it.body);
+        // self.emit(format!("    goto {}; // Goto start of loop\n", loop_end));
+        self.emit("    {\n");
+        self.emit_label(loop_start);
         let cond = self.visit_expr(&mut it.cond);
         self.emit(format!(
             "    if ( {} ) goto {}; // Loop cond check\n",
             self.ids.get_str(cond),
-            loop_start
+            body_start
         ));
-        self.visit_stmt(&mut it.body);
-        self.emit(format!("    goto {}; // Goto start of loop\n", loop_end));
         self.emit_label(loop_end);
+        self.emit("    }\n");
         self.continue_stack.pop();
         self.break_stack.pop();
         loop_start
@@ -468,6 +472,7 @@ i0 print(i64 a) {
 
     fn visit_body(&mut self, it: &mut Body) -> Label {
         let body_start = self.next_label();
+        self.emit_label(body_start);
         for stmt in it.stmts.iter_mut() {
             self.visit_stmt(stmt);
         }
@@ -604,11 +609,13 @@ i0 print(i64 a) {
     fn visit_dot(&mut self, it: &mut Dot) -> Id {
         let result = self.next_tmp();
         let lhs = self.visit_expr(&mut it.lhs);
+        let op = if it.deref { "->" } else { "." };
         self.emit(format!(
-            "    {} {} = {}._{};\n",
+            "    {} {} = {}{}_{};\n",
             self.current_ty.to_code(&self.ids),
             self.ids.get_str(result),
             self.ids.get_str(lhs),
+            op,
             self.ids.get_str(it.field_name)
         ));
         result
@@ -681,9 +688,9 @@ i0 print(i64 a) {
                 args_string.push_str(format!("{}, ", self.ids.get_str(arg)).as_str());
             }
             // get rid of trailing comma
-            args_string.pop();
-            args_string.pop();
         }
+        args_string.pop();
+        args_string.pop();
 
         let structure_rc = self.structs[&struct_name].clone();
         let structure = unsafe { (*structure_rc).get().as_ref() }.unwrap();
@@ -909,9 +916,11 @@ i0 print(i64 a) {
             match &mut it.tail[i].1.expr {
                 ExprKind::Dot(ref mut exp) => {
                     let lhs = self.visit_expr(&mut exp.lhs);
+                    let op = if exp.deref { "->" } else { "." };
                     self.emit(format!(
-                        "    {}.{} {} {};\n",
+                        "    {}{}{} {} {};\n",
                         self.ids.get_str(lhs),
+                        op,
                         self.ids.get_str(exp.field_name),
                         op,
                         self.ids.get_str(value)
@@ -954,9 +963,11 @@ i0 print(i64 a) {
         match &mut it.head.expr {
             ExprKind::Dot(ref mut exp) => {
                 let lhs = self.visit_expr(&mut exp.lhs);
+                let dop = if exp.deref { "->" } else { "." };
                 self.emit(format!(
-                    "    {}.{} {} {};\n",
+                    "    {}{}_{} {} {};\n",
                     self.ids.get_str(lhs),
+                    dop,
                     self.ids.get_str(exp.field_name),
                     op,
                     self.ids.get_str(value)
@@ -1001,6 +1012,7 @@ i0 print(i64 a) {
         match &mut it.expr {
             ExprKind::Dot(ref mut exp) => {
                 let lhs = self.visit_expr(&mut exp.lhs);
+                let op = if exp.deref { "->" } else { "." };
                 self.emit(format!(
                     "    {} {} = &({}.{});\n",
                     self.current_ty.to_code(&self.ids),
@@ -1074,11 +1086,20 @@ i0 print(i64 a) {
     fn visit_new(&mut self, it: &mut Ty) -> Id {
         let binding = self.next_tmp();
         self.emit(format!(
-            "{0} {1} = ({0}) malloc(sizeof ({2}));\n",
+            "    {0} {1} = ({0}) malloc(sizeof ({2}));\n",
             it.to_code(&self.ids),
             self.ids.get_str(binding),
             it.clone().derefed().to_code(&self.ids)
         ));
+        match it.kind {
+            TyKind::Struct(name) => {
+                let st = unsafe { (*self.structs[&name]).get().as_ref().unwrap() };
+                if st.type_id != -1 {
+                    self.emit(format!("    {}->type_id[0] = {};\n", self.ids.get_str(binding), st.type_id));
+                }
+            },
+            _ => {},
+        }
         binding
     }
 
@@ -1128,6 +1149,7 @@ i0 print(i64 a) {
     }
 
     fn visit_function(&mut self, it: &mut Function, i: usize) -> Label {
+        self.tmp_counter = 0;
         if it.body.is_none() {
             return Label(0);
         }

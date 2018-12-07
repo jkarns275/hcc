@@ -451,7 +451,6 @@ impl TypeChecker {
             match expected.compatibility_with(&got) {
                 TypeCompatibility::Ok => expected.clone(),
                 TypeCompatibility::None => {
-                    println!("?");
                     self.errs.push(TypeError {
                         err: TypeErrorKind::WrongType {
                             got: got.clone(),
@@ -558,7 +557,7 @@ impl TypeChecker {
     }
     pub fn visit_dot(&mut self, it: &mut Dot) -> Ty {
         let lhs_ty = self.visit_expr(&mut it.lhs);
-
+        let lhs_ty = if it.deref { lhs_ty.derefed() } else { lhs_ty };
         if !lhs_ty.has_field(it.field_name, self) {
             self.errs.push(TypeError {
                 err: TypeErrorKind::NoSuchField {
@@ -568,18 +567,20 @@ impl TypeChecker {
                 span: it.lhs.span.clone(),
                 ty: lhs_ty.clone(),
             });
+            return Ty::error()
         }
         match lhs_ty.kind {
             TyKind::Struct(id) => {
-                if let Some(st) = self.structs.get(&id) {
-                    if let Some(struct_field) = st.fields.get(&it.field_name) {
-                        struct_field.ty.clone()
-                    } else {
-                        Ty::error()
+                let mut curstruct = Some(id);
+                while let Some(st) = curstruct.take() {
+                    if let Some(st) = self.structs.get(&st) {
+                        if let Some(struct_field) = st.fields.get(&it.field_name) {
+                            return struct_field.ty.clone()
+                        }
+                        curstruct = st.parent.clone();
                     }
-                } else {
-                    Ty::error()
                 }
+                Ty::error()
             }
             _ => Ty::error(),
         }
@@ -606,7 +607,10 @@ impl TypeChecker {
                 });
                 Ty::error()
             }
-            _ => ty.derefed(),
+            _ => {
+                let r = ty.derefed();
+                r
+            },
         }
     }
     pub fn visit_call(&mut self, it: &mut Call) -> Ty {
@@ -792,10 +796,12 @@ impl TypeChecker {
         self.binary_expr_visit(&mut it.head, &mut it.tail[..])
     }
     pub fn visit_cmpexpr(&mut self, it: &mut CmpExpr) -> Ty {
-        self.binary_expr_visit(&mut it.head, &mut it.tail[..])
+        self.binary_expr_visit(&mut it.head, &mut it.tail[..]);
+        Ty::new(TyKind::I8)
     }
     pub fn visit_eqexpr(&mut self, it: &mut EqExpr) -> Ty {
-        self.binary_expr_visit(&mut it.head, &mut it.tail[..])
+        self.binary_expr_visit(&mut it.head, &mut it.tail[..]);
+        Ty::new(TyKind::I8)
     }
     pub fn visit_inverseexpr(&mut self, it: &mut Expr) -> Ty {
         let ty = self.visit_expr(it);

@@ -230,7 +230,7 @@ pub enum EqOp {
 impl Into<&'static str> for EqOp {
     fn into(self) -> &'static str {
         match self {
-            EqOp::Eq => "=",
+            EqOp::Eq => "==",
             EqOp::Neq => "!=",
         }
     }
@@ -423,6 +423,7 @@ impl PostfixExpr {
                         expr: ExprKind::Dot(box Dot {
                             lhs: expr,
                             field_name: id,
+                            deref: false,
                         }),
                         ty: None,
                     };
@@ -435,11 +436,8 @@ impl PostfixExpr {
                     expr = Expr {
                         span: posspan,
                         expr: ExprKind::Dot(box Dot {
-                            lhs: Expr {
-                                span: posspan,
-                                expr: ExprKind::Deref(box expr),
-                                ty: None,
-                            },
+                            lhs: expr,
+                            deref: true,
                             field_name: id,
                         }),
                         ty: None,
@@ -623,6 +621,7 @@ pub struct Index {
 pub struct Dot {
     pub field_name: Id,
     pub lhs: Expr,
+    pub deref: bool,
 }
 
 pub struct Call {
