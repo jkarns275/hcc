@@ -160,18 +160,21 @@ use argparse::ArgumentParser;
 use argparse::StoreTrue;
 use argparse::*;
 use std::fs;
+use std::process::Command;
 
 fn main() {
     let mut check = false;
     let mut verbose = false;
     let mut file: Option<String> = None;
     let mut wd: String = "./".to_string();
-    let mut output_file = "a.c".to_string();
-
+    let mut output_file = "a.out".to_string();
+    let mut opt = "0".to_string();
     let mut usage = vec![];
     {
         let mut ap = ArgumentParser::new();
         ap.set_description("HolyC Compiler");
+        ap.refer(&mut opt)
+            .add_option(&["--opt", "-O"], Store, "gcc optimization level");
         ap.refer(&mut file)
             .add_argument("file", StoreOption, "source file");
         ap.refer(&mut check)
@@ -223,7 +226,14 @@ fn main() {
                                     return;
                                 }
                                 let output = CG::codegen(ast);
-                                fs::write(output_file, output).unwrap();
+                                fs::write(format!("{}/{}.c", wd, output_file), output).unwrap();
+                                let res = Command::new("gcc")
+                                    .arg(format!("-o{}", output_file))
+                                    .arg(format!("-O{}", opt))
+                                    .arg(format!("{}.c", output_file))
+                                    .current_dir(wd)
+                                    .output()
+                                    .unwrap();
                             }
                             (Err((errors, idstore)), _warnings) => {
                                 println!("errors len: {}", errors.len());
