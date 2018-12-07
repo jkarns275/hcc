@@ -432,7 +432,11 @@ i0 print(i64 a) {
     }
 
     fn visit_stmt(&mut self, it: &mut Statement) -> Label {
-        match it {
+        if let Statement::Declaration(_) = it {
+        } else {
+            self.emit("{\n");
+        }
+        let r = match it {
             Statement::Body(ref mut body) => self.visit_body(body.as_mut()),
             Statement::If(ref mut ifstmt) => self.visit_if(ifstmt.as_mut()),
             Statement::While(ref mut whilestmt) => self.visit_while(whilestmt.as_mut()),
@@ -444,7 +448,12 @@ i0 print(i64 a) {
             }
             Statement::Jump(ref mut jmpstmt) => self.visit_jmp(jmpstmt),
             Statement::Declaration(ref mut decl) => self.visit_declaration(decl),
+        };
+        if let Statement::Declaration(_) = it {
+        } else {
+            self.emit("}\n");
         }
+        r
     }
 
     fn visit_while(&mut self, it: &mut WhileStmt) -> Label {
@@ -653,7 +662,7 @@ i0 print(i64 a) {
         let function = self.fns[&it.fn_name][ind].clone();
         let fn_name = self.generate_fn_name(unsafe { (*function).get().as_ref() }.unwrap(), ind);
 
-        if self.current_ty.kind == TyKind::I0 {
+        if self.current_ty == Ty::new(TyKind::I0) {
             self.emit(format!("    {}( {} );\n", fn_name, args_string));
             0
         } else {
@@ -721,7 +730,7 @@ i0 print(i64 a) {
                 vtable_signature,
                 self.ids.get_str(tid)
             ));
-            if self.current_ty.kind == TyKind::I0 {
+            if self.current_ty == Ty::new(TyKind::I0) {
                 self.emit(format!(
                     "    (*{})({});\n",
                     self.ids.get_str(fn_ptr),
@@ -744,7 +753,7 @@ i0 print(i64 a) {
                 .signature(&self.ids);
             let the_function = &unsafe { (*self.structs[&conforming_struct]).get().as_ref() }.unwrap().methods[&it.method_name][index];
             let method_name = self.generate_method_name(the_function, conforming_struct, structure.name);
-            if self.current_ty.kind == TyKind::I0 {
+            if self.current_ty == Ty::new(TyKind::I0) {
                 self.emit(format!(
                     "    {}({});\n",
                     method_name,

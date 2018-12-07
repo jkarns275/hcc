@@ -6,12 +6,8 @@ struct XorWowState {
     }
 };
 
-struct Junk : struct XorWowState {
-    i8 poo_poo;
-};
-
 i64 main() {
-    struct XorWowState* x = new(struct XorWowState);
-    i8 c = 24;
-    x->test2(&c, 2);
+    struct XorWowState b;
+    i64* a;
+    a = malloc(sizeof i64 * 5);
 }

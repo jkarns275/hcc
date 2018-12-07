@@ -93,6 +93,7 @@ arithmetic_expr!(AssignExpr, AssignOp, assign_expr, EqExpr, eq_expr);
 pub enum MulOp {
     Mul,
     Div,
+    Mod,
 }
 
 impl Into<&'static str> for MulOp {
@@ -100,6 +101,7 @@ impl Into<&'static str> for MulOp {
         match self {
             MulOp::Mul => "*",
             MulOp::Div => "/",
+            MulOp::Mod => "%",
         }
     }
 }
@@ -108,8 +110,9 @@ impl MulOp {
     pub fn from_pair<'r>(pair: Pair<'r, Rule>, _context: &mut Context) -> Result<Self, AstError> {
         debug_assert!(pair.as_rule() == Rule::mul_operator);
         Ok(match pair.as_str() {
-            "/" => MulOp::Mul,
-            "*" => MulOp::Div,
+            "*" => MulOp::Mul,
+            "/" => MulOp::Div,
+            "%" => MulOp::Mod,
             _ => panic!("Invalid MulOp"),
         })
     }

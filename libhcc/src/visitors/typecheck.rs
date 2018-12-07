@@ -80,6 +80,10 @@ pub enum TypeErrorKind {
         field_name: Id,
         parent_span: PosSpan,
     },
+    DuplicateName {
+        other: PosSpan,
+        field_name: Id,
+    },
     DuplicateMethodDefinitions {
         other_span: PosSpan,
         ty: Ty,
@@ -175,6 +179,14 @@ impl TypeError {
                 let line_n_str = (line - linestart).to_string();
                 let indent = " ".repeat(line_n_str.len() + 2);
                 format!("both parent struct and define a field with the name '{}'\nfield first defined here\n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}|", 
+                    idstore.get_string(*field_name).unwrap(), indent, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent)
+            },
+            TypeErrorKind::DuplicateName { other, field_name } => {
+                let (line, col) = Span::new(program, other.start, other.end).unwrap().start_pos().line_col();
+                let (filename, linestart) = lineinfo.get_file_and_line_start(line).unwrap();
+                let line_n_str = (line - linestart).to_string();
+                let indent = " ".repeat(line_n_str.len() + 2);
+                format!("local variable with name '{}' defined twice\nfield first defined here\n{}---> {}:{}:{}\n{}|\n {} |  {}\n{}|", 
                     idstore.get_string(*field_name).unwrap(), indent, filename, line_n_str, col, indent, line_n_str, lines[line - 1], indent)
             },
             TypeErrorKind::DuplicateMethodDefinitions { other_span, ty, method_name } => {
@@ -302,6 +314,22 @@ impl TypeChecker {
         }
     }
 
+    fn add_to_varstack(&mut self, name: Id, ty: Ty, span: PosSpan) -> bool {
+        for vmap in self.var_stack.iter() {
+            if let Some((otherty, otherspan)) = vmap.get(&name) {
+                self.errs.push(TypeError {
+                    err: TypeErrorKind::DuplicateName {
+                        field_name: name,
+                        other: otherspan.clone(),
+                    },
+                    span: span.clone(),
+                    ty: ty.clone()
+                });
+            }
+        }
+        self.var_stack[0].insert(name, (ty.clone(), span.clone())).is_none()
+    }
+
     fn binary_expr_visit<T>(&mut self, head: &mut Expr, tail: &mut [(T, Expr)]) -> Ty
     where
         T: Into<&'static str> + Copy + Clone,
@@ -369,7 +397,7 @@ impl TypeChecker {
             Statement::Expr(ref mut expr) => self.visit_expr(expr),
             Statement::Jump(ref mut jmpstmt) => self.visit_jmp(jmpstmt),
             Statement::Declaration(ref mut decl) => self.visit_declaration(decl),
-        }
+        }    
     }
 
     pub fn visit_while(&mut self, it: &mut WhileStmt) -> Ty {
@@ -382,11 +410,7 @@ impl TypeChecker {
         for statement in it.stmts.iter_mut() {
             self.visit_stmt(statement);
             if let Statement::Declaration(ref mut dec) = statement {
-                if let Some((_ty, _span)) =
-                    self.var_stack[0].insert(dec.name, (dec.ty.clone(), dec.span.clone()))
-                {
-                    // Do something?
-                }
+                self.add_to_varstack(dec.name, dec.ty.clone(), dec.span.clone());
             }
         }
         self.var_stack.pop_front();
@@ -925,17 +949,14 @@ impl TypeChecker {
                 ),
             );
         }
-        for arg in it.arg_order.iter() {
-            vmap.insert(
-                *arg,
-                (it.args.get(arg).unwrap().ty.clone(), it.span.clone()),
-            );
-        }
         self.var_stack.push_front(vmap);
+        for arg in it.arg_order.iter() {
+            self.add_to_varstack(*arg, it.args[arg].ty.clone(), it.span.clone());
+        }
         let body = it.body.as_mut().unwrap();
         for statement in body.stmts.iter_mut() {
             if let Statement::Declaration(ref mut dec) = statement {
-                self.var_stack[0].insert(dec.name, (dec.ty.clone(), dec.span.clone()));
+                self.add_to_varstack(dec.name, dec.ty.clone(), dec.span.clone());
             } else if let Statement::Jump(ref mut jmp) = statement {
                 match jmp {
                     JumpStmt::Break | JumpStmt::Continue => continue,
@@ -1094,17 +1115,5 @@ impl TypeChecker {
 
         Ty::new(TyKind::Struct(it.name))
     }
-    pub fn visit_id(&mut self, it: &mut Id) -> Ty {
-        for i in self.var_stack.iter() {
-            if let Some((t, _span)) = i.get(it) {
-                return t.clone();
-            }
-        }
-        self.errs.push(TypeError {
-            err: TypeErrorKind::IdNotFound { name: *it },
-            span: self.expr_span.clone(),
-            ty: Ty::new(TyKind::I0),
-        });
-        Ty::error()
-    }
+
 }

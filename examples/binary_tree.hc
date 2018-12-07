@@ -1,4 +1,4 @@
-#include "rng.c"
+#include "rng.hc"
 
 struct Tree {
     struct Tree *left, *right;
@@ -12,18 +12,19 @@ struct Tree {
     }
 
     u0 insert(i64 key) {
+        if (this == 0) { return 0; }
         if (this->empty) {
             this->key = key;
             this->empty = 0;
         } else if (this->key > key) {
             if (this->left == 0) {
-                this->left = malloc(sizeof (struct Tree));
+                this->left = new(struct Tree);
                 this->left->init();
             }
             this->left->insert(key);
         } else if (this->key < key) {
             if (this->right == 0) {
-                this->right = malloc(sizeof (struct Tree));
+                this->right = new(struct Tree);
                 this->right->init();
             }
             this->right->insert(key);
@@ -42,21 +43,25 @@ struct Tree {
     }
 };
 
-int main() {
-    struct Tree binary_tree;
-    struct Tree* btp = &binary_tree;
-
+i64 main() {
+    struct Tree* btp = new(struct Tree);
     btp->init();
 
     struct XorWowState rng;
     seed_rng(&rng);
-    for (i64 i = 0; i < 100; i += 1) {
-        btp->insert(xorwow(&rng));
+    i64 i = 0;
+    while (i < 2) {
+        print(i);
+        btp->insert(xorwow(&rng) % 32);
+        i += 1;
     }
 
+    i = 0;
     seed_rng(&rng);
-    for (i64 i = 0; i < 100; i += 1) {
-        if (btp->search(xorwow(&rng))) {
+    while (i < 2) {
+        print(i);
+        i += 1;
+        if (btp->search(xorwow(&rng) % 32)) {
             continue;
         }
         return -1;

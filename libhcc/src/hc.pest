@@ -76,7 +76,7 @@ dec_lit = ${ dec_digit+ }
 
 int_lit = ${ bin_lit | hex_lit | dec_lit }
 
-ident = ${
+ident = ${  
     ( 'a'..'z' | 'A'..'Z' | "_" | '\u{203C}'..'\u{3299}' | '\u{1F000}'..'\u{1F644}' )
     ~ ( 'a'..'z' | 'A'..'Z' | "_" | '0'..'9' | '\u{203C}'..'\u{3299}' | '\u{1F000}'..'\u{1F644}' )* }
 
@@ -231,14 +231,14 @@ initializer_list = { initializer ~ ( comma ~ initializer )* }
 
 stmt = {
 //labeled_stmt |
-    compound_stmt | jump_stmt | expr_stmt | selection_stmt | iteration_stmt
+    compound_stmt | jump_stmt | selection_stmt | iteration_stmt | expr_stmt
 }
 //labeled_stmt = {
 //      ( ident ~ colon ~ stmt )
 //    | ( case_kw ~ constant_expr ~ colon ~ stmt )
 //    | ( default_kw ~ colon ~ stmt )
 //}
-compound_stmt = { lbrace ~ ( stmt | declaration )* ~ rbrace }
+compound_stmt = { lbrace ~ ( declaration | stmt )* ~ rbrace }
 stmt_list = { stmt+ }
 expr_stmt = { expr? ~ semicolon }
 selection_stmt = {

@@ -28,8 +28,8 @@ u0 sort(i64* numbers, i64 size) {
     qs(numbers, 0, size - 1);
 }
 
-i64 size = 10;
-int main() {
+i64 main() {
+    i64 size = 10;
     i64 *numbers = malloc(8 * size);
     numbers[0] = 20;
     numbers[1] = 7;
