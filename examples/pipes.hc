@@ -1,17 +1,29 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <unistd.h>
+struct XorWowState {
+    i64* state;
+};
 
-#define clearscreen() printf("\033[H\033[J")
-#define movecursor(x, y) printf("\033[%d;%dH", (y), (x))
-#define printcoloredstr(ch, color) printf("\033[%dm%s", color, ch)
-#define randbool() (rand()&1)
-int ROWS = 24;
-int COLS = 80;
+i64 xorwow(struct XorWowState* state) {
+    i64 s, t = state->state[3];
+    t = xor(t, t / 4);
+    t = xor(t, t * 2);
+    state->state[3] = state->state[2] = state->state[1] = s = state->state[0];
+    t = xor(t, s);
+    t = xor(t, s * 16);
+    state->state[0] = t;
+    return t + (state->state[4] += 362437);
+}
+
+void seed_rng(struct XorWowState* rng) {
+    rng->state = malloc(sizeof i64 * 5);
+    rng->state[0] = -123356245;
+    rng->state[1] = 158809235;
+    rng->state[2] = 120035555;
+    rng->state[3] = 154124;
+    rng->state[4] = 11318611;
+}
+
+#define ROWS 48
+#define COLS 160
 
 #define BACKGROUNDCOLORS 0
 
@@ -23,6 +35,11 @@ int COLS = 80;
 #define GREEN 32+BACKGROUNDCOLORS
 #define RED 31+BACKGROUNDCOLORS
 
+#define U 0
+#define R 1
+#define D 2
+#define L 3
+
 
 
 /*
@@ -33,189 +50,179 @@ int COLS = 80;
   4 -> DOWN/LEFT => LEFT/UP
   5 -> DOWN/RIGHT => RIGHT/UP
  */
-char* charSets[] = {"┃", "━", "┓", "┏", "┛", "┗"};
-int charset = 0;
-int nPipes = 2;
-int colorMode = 0;
+#define nPipes 2
+#define colorMode 0
 
+#define LBRACE 91
+#define ESCAPE 27
+#define SEMICOLON 59
+#define H 72
+#define J 24
+#define m 109
 
+struct Pipe {
+  i64 x, y, color, track;
+  i64 direction, lastDirection;
+  i8* charset;
+  struct XorWowState* rng;
+  i64** map;
 
-int getColor() {
-  static const int map[][6] = {
-    {WHITE, RED, GREEN, YELLOW, CYAN, WHITE}
-  };
-  if (colorMode == 0) return map[0][rand() % 6];
-    
-  else
-  return 31 + (rand() % 7);
-}
+  u0 movecursor(i64 x, i64 y) {
+    putch(ESCAPE);
+    putch(LBRACE);
+    puti64(y);
+    putch(SEMICOLON);
+    puti64(x);
+    putch(H);
+  }
 
-typedef struct Pipe {
-  int x, y, color, track;
-  enum { U = 0, R = 1, D = 2, L = 3 } direction, lastDirection;
-} Pipe;
+  i64 getColor() {
+    return 31 + (this->rand() % 7);
+  }
 
-void resetPipe(Pipe* p) {
-  if (randbool()) {
-    if (randbool()) {
-      p->y = 0;
-      p->direction = D;
+  i0 putcoloredc(i64 color, i8 str) {
+    putch(ESCAPE);
+    putch(LBRACE);
+    puti64(color);
+    putch(m);
+    putch(str);
+  }
+
+  i0 init() {
+    this->rng = new struct XorWowState;
+    seed_rng(this->rng);
+    this->charset = malloc(6);
+    this->charset[0] = 124;
+    this->charset[1] = 45;
+    this->charset[2] = 92;
+    this->charset[3] = 47;
+    this->charset[4] = 47;
+    this->charset[5] = 92; 
+
+    this->map = malloc(4 * sizeof (i64*));
+
+    this->map[0] = malloc(4 * sizeof(i64));
+    this->map[0][0] = 0;
+    this->map[0][1] = 3;
+    this->map[0][2] = 0;
+    this->map[0][3] = 2;
+
+    this->map[1] = malloc(4 * sizeof(i64));
+    this->map[1][0] = 4;
+    this->map[1][1] = 1;
+    this->map[1][2] = 2;
+    this->map[1][3] = 1;
+
+    this->map[2] = malloc(4 * sizeof(i64));
+    this->map[2][0] = 0;
+    this->map[2][1] = 5;
+    this->map[2][2] = 0;
+    this->map[2][3] = 4;
+
+    this->map[3] = malloc(4 * sizeof(i64));
+    this->map[3][0] = 5;
+    this->map[3][1] = 1;
+    this->map[3][2] = 3;
+    this->map[3][3] = 1;
+  }
+
+  i8 randbool() {
+    return this->rand() % 2;
+  }
+
+  i64 rand() {
+    i64 p = xorwow(this->rng);
+    if (p < 0) return p * -1;
+    else return p;
+  }
+
+  i0 resetPipe() {
+    if (this->randbool()) {
+      if (this->randbool()) {
+        this->y = 0;
+        this->direction = D;
+      } else {
+        this->y = ROWS;
+        this->direction = U;
+      }
+      this->x = this->rand() % (COLS-1);
     } else {
-      p->y = ROWS;
-      p->direction = U;
+      if (this->randbool()) {
+        this->x = 0;
+        this->direction = R;
+      } else {
+        this->x = COLS;
+        this->direction = L;
+      }
+      this->y = this->rand() % (ROWS-1);
     }
-    p->x = rand() % (COLS-1);
-  } else {
-    if (randbool()) {
-      p->x = 0;
-      p->direction = R;
+    this->track = 2 + (this->rand() % 8);
+    this->color = this->getColor();
+  }
+
+
+  void turnPipe() {
+    this->lastDirection = this->direction;
+    if ((this->direction == U) + (this->direction == D)) {
+      if (this->randbool()) this->direction = L;
+      else if (this->randbool()) this->direction = R;
     } else {
-      p->x = COLS;
-      p->direction = L;
+      if (this->randbool()) this->direction = U;
+      else if (this->randbool()) this->direction = D;
     }
-    p->y = rand() % (ROWS-1);
+    this->track = 2 + (this->rand() % 8);
   }
-  p->track = 2 + (rand() % 8);
-  p->color = getColor();
-}
-
-void turnPipe(Pipe* p) {
-  p->lastDirection = p->direction;
-  switch(p->direction) {
-  case U:
-  case D:
-    if (randbool()) p->direction = L;
-    else if (randbool()) p->direction = R;
-    break;
-  case L:
-  case R:
-    if (randbool()) p->direction = U;
-    else if (randbool()) p->direction = D;
+  
+  /*
+    0 -> UP/DOWN => UP/DOWN
+    1 -> LEFT/RIGHT => LEFT/RIGHT
+    2 -> UP/RIGHT => LEFT/DOWN
+    3 -> UP/LEFT => RIGHT/DOWN
+    4 -> DOWN/LEFT => LEFT/UP
+    5 -> DOWN/RIGHT => RIGHT/UP
+  */
+  void printPipe() {
+    i8 c = this->charset[this->map[this->lastDirection][this->direction]];
+    this->movecursor(this->x, this->y);
+    this->putcoloredc(this->color, c);
+    this->lastDirection = this->direction;
   }
-  p->track = 2 + (rand() % 8);
-}
-
-/*
-  0 -> UP/DOWN => UP/DOWN
-  1 -> LEFT/RIGHT => LEFT/RIGHT
-  2 -> UP/RIGHT => LEFT/DOWN
-  3 -> UP/LEFT => RIGHT/DOWN
-  4 -> DOWN/LEFT => LEFT/UP
-  5 -> DOWN/RIGHT => RIGHT/UP
-*/
-void printPipe(Pipe* p) {
-  // U R D L
-  // 0 1 2 3
-  static const int map[][4] = {{0, 3, 0, 2},
-                               {4, 1, 2, 1},
-                              {0, 5, 0, 4},
-                              {5, 1, 3, 1}};
-  char* c = charSets[map[p->lastDirection][p->direction]];
-  movecursor(p->x, p->y);
-  printcoloredstr(c, p->color);
-  p->lastDirection = p->direction;
-}
-
-void updatePipe(Pipe* p) {
-  p->track--;
-  if (p->track <= 0) {
-    turnPipe(p);
-  } else {
-    switch(p->direction) {
-    case U:
-      p->y -= 1;
-      break;
-    case D:
-      p->y += 1;
-      break;
-    case L:
-      p->x -= 1;
-      break;
-    case R:
-      p->x += 1;
-    }
-    if (p->x <= 0 | p->x >= COLS |
-        p->y <= 0 | p->y >= ROWS) {
-      resetPipe(p);
-    }
-  }
-  printPipe(p); 
-}
-
-void handleArgs(int argc, char** args) {
-  for (int i = 0 ; i < argc ; i++) {
-    if (strcmp("-c", args[i]) == 0 | strcmp("-C", args[i]) == 0) {
-      if (i + 1 < argc) {
-        charset = atoi(args[i + 1]);
+  
+  void updatePipe() {
+    this->track -= 1;
+    if (this->track <= 0) {
+      this->turnPipe();
+    } else {
+      if (this->direction == U) {
+        this->y -= 1;
+      } else if (this->direction == D) {
+        this->y += 1;
+      } else if (this->direction == L) {
+        this->x -= 1;
       } else {
-        printf("Usage: -c [0-4]");
-        exit(0);
+        this->x += 1;
       }
-    } else if (strcmp("-n", args[i]) == 0 | strcmp("-N", args[i]) == 0) {
-      if (i + 1 < argc) {
-        nPipes = atoi(args[i + 1]);
-        if (nPipes < 1) nPipes = 1;
-      } else {
-        printf("Usage: -n [number of pipes]");
-        exit(0);
-      }
-    } else if (strcmp("-h", args[i]) == 0 | strcmp("-H", args[i]) == 0) {
-      if (i + 1 < argc) {
-        ROWS = atoi(args[i + 1]);
-if (ROWS < 10 || ROWS > 200) ROWS = 20;
-      } else {
-        printf("Usage: -h [number of rows]");
-        exit(0);
-      }
-    } else if (strcmp("-W", args[i]) == 0 | strcmp("-w", args[i]) == 0) {
-      if (i + 1 < argc) {
-        COLS = atoi(args[i + 1]);
-        if (COLS < 10 || COLS > 260) COLS = 10;
-      } else {
-        printf("Usage: -w [number of heights]");
-        exit(0);
+      if ((this->x <= 0) + (this->x >= COLS) +
+          (this->y <= 0) + (this->y >= ROWS)) {
+        this->resetPipe();
       }
     }
+    this->printPipe(); 
   }
-}
+};
 
-int main(int argc, char** args) {
-  handleArgs(argc, args);
-  Pipe* pipes = malloc(sizeof(Pipe) * nPipes);
-  for (int i = 0 ; i < nPipes ; i++) resetPipe(&pipes[i]);
-
-  void handle(int signum) {
-    clearscreen();
-    printcoloredstr("\n", 30);
-    printf("Goodbye :)\n");
-    free(pipes);
-    exit(0);
+i64  main() {
+  struct Pipe* pipe = new struct Pipe;
+  pipe->init();
+  pipe->resetPipe();
+  i64 i = 0;
+  while (i < 256) {
+    putch(10);
+    i += 1;
   }
-
-  pid_t pid = fork();
-
-  if (pid) {
-    char _unused;
-    scanf("%c", &_unused);
-    free(pipes);
-    kill(pid, SIGKILL);
-    handle(0);
-  } else {
-    srand(time(NULL));
-
-    signal(SIGINT, handle);
-    struct timespec t1, t2;
-    t1.tv_sec = 0;
-    t1.tv_nsec = 1000000000 / 20; // 50 Milliseconds
-    clearscreen();
-    while (1) {
-      for (int i = 0 ; i < nPipes ; i++) {
-          updatePipe(&pipes[i]);
-      }
-      fflush(stdout);
-      nanosleep(&t1, &t2);
-      //movecursor(0, 0);
-      //printf("x: %d ; y: %d ; track: %d", pipes[0].x, pipes[0].y, pipes[0].track);
-    }
+  while (1) {
+    pipe->updatePipe();
+    flush();
+    sleepms(50);
   }
 }

@@ -239,9 +239,73 @@ impl Ast {
             &mut context,
         )
         .unwrap();
+        let mut puti64 = Function::from_pair(
+            CParser::parse(Rule::function_header, "i0 puti64(i64 a);")
+                .unwrap()
+                .next()
+                .unwrap(),
+            &mut context,
+        )
+        .unwrap();
+        let mut putch = Function::from_pair(
+            CParser::parse(Rule::function_header, "i0 putch(i8 a);")
+                .unwrap()
+                .next()
+                .unwrap(),
+            &mut context,
+        )
+        .unwrap();
+        let mut flush = Function::from_pair(
+            CParser::parse(Rule::function_header, "i0 flush();")
+                .unwrap()
+                .next()
+                .unwrap(),
+            &mut context,
+        )
+        .unwrap();
+        let mut sleepms = Function::from_pair(
+            CParser::parse(Rule::function_header, "i0 sleepms(i64 ms);")
+                .unwrap()
+                .next()
+                .unwrap(),
+            &mut context,
+        )
+        .unwrap();
+        let mut xor = Function::from_pair(
+            CParser::parse(Rule::function_header, "i64 xor(i64 a, i64 b);")
+                .unwrap()
+                .next()
+                .unwrap(),
+            &mut context,
+        )
+        .unwrap();
+        let mut and = Function::from_pair(
+            CParser::parse(Rule::function_header, "i64 and(i64 a, i64 b);")
+                .unwrap()
+                .next()
+                .unwrap(),
+            &mut context,
+        )
+        .unwrap();
+        let mut or = Function::from_pair(
+            CParser::parse(Rule::function_header, "i64 or(i64 a, i64 b);")
+                .unwrap()
+                .next()
+                .unwrap(),
+            &mut context,
+        )
+        .unwrap();
 
         print.intrinsic = true;
         malloc.intrinsic = true;
+        puti64.intrinsic = true;
+        putch.intrinsic = true;
+        flush.intrinsic = true;
+        sleepms.intrinsic = true;
+        xor.intrinsic = true;
+        and.intrinsic = true;
+        or.intrinsic = true;
+
         context
             .functions
             .entry(context.idstore.get_id("print"))
@@ -252,6 +316,41 @@ impl Ast {
             .entry(context.idstore.get_id("malloc"))
             .or_insert_with(|| vec![])
             .insert(0, Rc::new(malloc));
+        context
+            .functions
+            .entry(context.idstore.get_id("puti64"))
+            .or_insert_with(|| vec![])
+            .insert(0, Rc::new(puti64));
+        context
+            .functions
+            .entry(context.idstore.get_id("putch"))
+            .or_insert_with(|| vec![])
+            .insert(0, Rc::new(putch));
+        context
+            .functions
+            .entry(context.idstore.get_id("flush"))
+            .or_insert_with(|| vec![])
+            .insert(0, Rc::new(flush));
+        context
+            .functions
+            .entry(context.idstore.get_id("sleepms"))
+            .or_insert_with(|| vec![])
+            .insert(0, Rc::new(sleepms));
+        context
+            .functions
+            .entry(context.idstore.get_id("xor"))
+            .or_insert_with(|| vec![])
+            .insert(0, Rc::new(xor));
+        context
+            .functions
+            .entry(context.idstore.get_id("and"))
+            .or_insert_with(|| vec![])
+            .insert(0, Rc::new(and));
+        context
+            .functions
+            .entry(context.idstore.get_id("or"))
+            .or_insert_with(|| vec![])
+            .insert(0, Rc::new(or));
 
         let r = if context.errors.len() != 0 {
             Err(context.errors)

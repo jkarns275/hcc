@@ -107,6 +107,26 @@ typedef void i0;
 i0 print(i64 a) {
     printf("%ld\n", a);   
 }
+
+i0 puti64(i64 a) {
+    printf("%ld", a);
+}
+
+i0 putch(i8 a) {
+    printf("%c", a);
+}
+
+i0 flush() {
+    fflush(stdout);
+}
+
+i0 sleepms(i64 ms) {
+    usleep(ms * 1000);
+}
+
+i64 xor(i64 a, i64 b) { return a ^ b; }
+i64 and(i64 a, i64 b) { return a & b; }
+i64 or(i64 a, i64 b) { return a | b; }
 "#;
         cg.emit(header);
         cg.emit("\n// \n// struct headers\n//\n");
@@ -115,14 +135,15 @@ i0 print(i64 a) {
         cg.visit_function_headers();
 
         cg.emit("\n// \n// method headers\n//\n");
-        let structures = cg.structs.clone();
-        for structure in structures.values() {
+        let mut structures = cg.structs.clone().values().cloned().collect::<Vec<_>>();
+        structures.sort_unstable_by(|a, b| unsafe { (**a).get().as_ref().unwrap().n }.cmp(&unsafe { (**b).get().as_ref().unwrap().n }));
+        for structure in structures.iter() {
             let mut structure = unsafe { (**structure).get().as_mut() }.unwrap();
             cg.visit_method_headers(&mut *structure);
         }
         
         cg.emit("\n// \n// struct definitions\n//\n");
-        for structure in structures.values() {
+        for structure in structures.iter() {
             let mut structure = unsafe { (**structure).get().as_mut() }.unwrap();
             cg.visit_struct(&mut *structure);
         }
@@ -131,7 +152,7 @@ i0 print(i64 a) {
         cg.visit_vtables();
 
         cg.emit("\n// \n// method definitions\n//\n");
-        for structure in structures.values() {
+        for structure in structures.iter() {
             let mut structure = unsafe { (**structure).get().as_mut() }.unwrap();
             cg.visit_methods(&mut *structure);
         }
@@ -1023,10 +1044,11 @@ i0 print(i64 a) {
                 let lhs = self.visit_expr(&mut exp.lhs);
                 let op = if exp.deref { "->" } else { "." };
                 self.emit(format!(
-                    "    {} {} = &({}.{});\n",
+                    "    {} {} = &({}{}_{});\n",
                     self.current_ty.to_code(&self.ids),
                     self.ids.get_str(result),
                     self.ids.get_str(lhs),
+                    op,
                     self.ids.get_str(exp.field_name)
                 ));
             }

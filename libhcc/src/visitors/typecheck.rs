@@ -351,14 +351,14 @@ impl TypeChecker {
                         span: exp.span.clone(),
                         ty: ty.clone(),
                     });
-                    self.numeric_type_hint.push(Ty::error());
                     tys.push(Ty::error());
                 }
-                (TyKind::I8, true) => {
-                    self.numeric_type_hint.push(ty);
-                }
+                (_, true) => {
+                    self.numeric_type_hint.push(ty.clone());
+                    tys.push(ty.clone());
+                },
                 _ => {
-                    self.numeric_type_hint.push(Ty::new(TyKind::I64));
+                    tys.push(ty.clone());
                 }
             }
         }
@@ -640,7 +640,8 @@ impl TypeChecker {
     pub fn visit_call(&mut self, it: &mut Call) -> Ty {
         let mut args = vec![];
         for arg in it.args.iter_mut() {
-            args.push(self.visit_expr(arg));
+            let t = self.visit_expr(arg);
+            args.push(t);
         }
 
         let mut min_conformity = u64::MAX;
@@ -900,7 +901,8 @@ impl TypeChecker {
     }
 
     pub fn visit_number(&mut self, _it: &mut i64) -> Ty {
-        let a = self.numeric_type_hint[self.numeric_type_hint.len() - 1].clone();
+        let mut a = self.numeric_type_hint.last().cloned().unwrap_or(Ty::new(TyKind::I64));
+        a.ptr = 0;
         if a.kind == TyKind::Error {
             Ty::new(TyKind::I64)
         } else {
@@ -933,10 +935,6 @@ impl TypeChecker {
                 ty: Ty::new(TyKind::I0),
             });
             return Ty::error();
-        }
-
-        if it.return_type.is_integral_type() {
-            self.numeric_type_hint.push(it.return_type.clone());
         }
 
         let mut vmap = HashMap::with_capacity(it.arg_order.len());

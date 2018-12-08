@@ -10,6 +10,8 @@ use pest::iterators::Pair;
 use std::collections::{HashSet, HashMap};
 use std::rc::Rc;
 
+static mut struct_counter: usize = 0;
+
 pub struct StructField {
     pub ty: Ty,
     pub span: PosSpan,
@@ -31,6 +33,7 @@ pub struct Structure {
     pub children: HashSet<Id>,
     pub empty: bool,
     pub type_id: i8,
+    pub n: usize, // Defined Nth
 }
 
 impl Structure {
@@ -107,6 +110,8 @@ impl Structure {
         let mut pairs = pair.into_inner();
         let _ = expect!(pairs, Rule::struct_kw, "struct keyword", span);
         let name = ident!(pairs, context.idstore, span);
+        let n = unsafe { struct_counter };
+        unsafe { struct_counter += 1 }
         Ok(if let Some(next) = pairs.next() {
             let mut parent_span = None;
             let parent = match next.as_rule() {
@@ -135,6 +140,7 @@ impl Structure {
                 name,
                 children: HashSet::new(),
                 type_id: -1,
+                n,
             }
         } else {
             Structure {
@@ -147,6 +153,7 @@ impl Structure {
                 empty: true,
                 children: HashSet::new(),
                 type_id: -1,
+                n,
             }
         })
     }
@@ -156,7 +163,6 @@ impl Structure {
         for child in other.children.iter() {
             self.children.insert(*child);
         }
-        self.empty = false;
     }
 }
 
