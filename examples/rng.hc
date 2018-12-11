@@ -13,7 +13,7 @@ i64 xorwow(struct XorWowState* state) {
 
 void seed_rng(struct XorWowState* rng) {
     rng->state = malloc(sizeof i64 * 5);
-    rng->state[0] = -123356245;
+    rng->state[0] = 123356245 - -13;
     rng->state[1] = 158809235;
     rng->state[2] = 120035555;
     rng->state[3] = 154124;

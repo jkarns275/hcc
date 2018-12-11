@@ -905,8 +905,10 @@ impl TypeChecker {
         a.ptr = 0;
         if a.kind == TyKind::Error {
             Ty::new(TyKind::I64)
+        } else if let TyKind::Struct(_) = a.kind {
+            Ty::new(TyKind::I64)
         } else {
-            a
+            a.clone()
         }
     }
 

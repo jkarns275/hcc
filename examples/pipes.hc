@@ -22,8 +22,8 @@ void seed_rng(struct XorWowState* rng) {
     rng->state[4] = 11318611;
 }
 
-#define ROWS 48
-#define COLS 160
+#define ROWS 24
+#define COLS 80
 
 #define BACKGROUNDCOLORS 0
 
@@ -63,7 +63,7 @@ void seed_rng(struct XorWowState* rng) {
 struct Pipe {
   i64 x, y, color, track;
   i64 direction, lastDirection;
-  i8* charset;
+  i64* charset;
   struct XorWowState* rng;
   i64** map;
 
@@ -91,13 +91,13 @@ struct Pipe {
   i0 init() {
     this->rng = new struct XorWowState;
     seed_rng(this->rng);
-    this->charset = malloc(6);
-    this->charset[0] = 124;
-    this->charset[1] = 45;
-    this->charset[2] = 92;
-    this->charset[3] = 47;
-    this->charset[4] = 47;
-    this->charset[5] = 92; 
+    this->charset = malloc(6 * 8);
+    this->charset[0] = 186;
+    this->charset[1] = 205;
+    this->charset[2] = 200;
+    this->charset[3] = 201;
+    this->charset[4] = 201;
+    this->charset[5] = 200; 
 
     this->map = malloc(4 * sizeof (i64*));
 

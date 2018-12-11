@@ -46,22 +46,22 @@ int_type = { // "u8" |
     //"i16" | "i32" |
     // "i64"
 }
-union_kw = { "union" }
-struct_kw = { "struct" }
-enum_kw = { "enum" }
-const_kw = { "const" }
-volatile_kw = { "volatile" }
-case_kw = { "case" }
-default_kw = { "default" }
-if_kw = _{ "if" }
-else_kw = _{ "else" }
-return_kw = { "return" }
-continue_kw = { "continue" }
-switch_kw = { "switch" }
-goto_kw = { "goto" }
-while_kw = { "while" }
-for_kw = { "for" }
-new_kw = { "new" }
+union_kw = ${ "union" ~ !(ident_char) }
+struct_kw = ${ "struct" ~ !(ident_char) }
+enum_kw = ${ "enum"~ !(ident_char)  }
+const_kw = ${ "const" ~ !(ident_char) }
+volatile_kw = ${ "volatile" ~ !(ident_char) }
+case_kw = ${ "case" ~ !(ident_char) }
+default_kw = ${ "default" ~ !(ident_char) }
+if_kw = ${ "if" ~ !(ident_char) }
+else_kw = ${ "else" ~ !(ident_char) }
+return_kw = ${ "return" ~ !(ident_char) }
+continue_kw = ${ "continue" ~ !(ident_char) }
+switch_kw = ${ "switch" ~ !(ident_char) }
+goto_kw = ${ "goto" ~ !(ident_char) }
+while_kw = ${ "while" ~ !(ident_char) }
+for_kw = ${ "for" ~ !(ident_char) }
+new_kw = ${ "new" ~ !(ident_char) }
 
 
 bin_digit = ${ ("0" | "1") }
@@ -75,6 +75,8 @@ hex_lit = ${ hex_prefix ~ hex_digit+ }
 dec_lit = ${ dec_digit+ }
 
 int_lit = ${ bin_lit | hex_lit | dec_lit }
+
+ident_char = { ( 'a'..'z' | 'A'..'Z' | "_" | '0'..'9' | '\u{203C}'..'\u{3299}' | '\u{1F000}'..'\u{1F644}' ) }
 
 ident = ${  
     ( 'a'..'z' | 'A'..'Z' | "_" | '\u{203C}'..'\u{3299}' | '\u{1F000}'..'\u{1F644}' )

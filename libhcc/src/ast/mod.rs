@@ -248,7 +248,7 @@ impl Ast {
         )
         .unwrap();
         let mut putch = Function::from_pair(
-            CParser::parse(Rule::function_header, "i0 putch(i8 a);")
+            CParser::parse(Rule::function_header, "i0 putch(i64 a);")
                 .unwrap()
                 .next()
                 .unwrap(),

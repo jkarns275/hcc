@@ -52,9 +52,11 @@ impl IfStmt {
         debug_assert!(pair.as_rule() == Rule::selection_stmt);
         let span = pair.as_span();
         let mut pairs = pair.into_inner();
+        let _if = expect!(pairs, Rule::if_kw, "ifkw", span);
         let cond = Expr::from_pair(expect!(pairs, Rule::expr, "expr", span), context)?;
         let true_body = Statement::from_pair(expect!(pairs, Rule::stmt, "stmt", span), context)?;
-        let false_body = if let Some(false_body) = pairs.next() {
+        let false_body = if let Some(_else) = pairs.next() {
+            let false_body = pairs.next().unwrap();
             Some(Statement::from_pair(false_body, context)?)
         } else {
             None

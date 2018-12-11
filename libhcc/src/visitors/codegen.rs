@@ -112,7 +112,7 @@ i0 puti64(i64 a) {
     printf("%ld", a);
 }
 
-i0 putch(i8 a) {
+i0 putch(i64 a) {
     printf("%c", a);
 }
 
