@@ -5,10 +5,10 @@ hcc examples/bubble_sort.hc -o out/bubble_sort
 hcc examples/quicksort.hc -o out/quicksort
 hcc examples/tree_visitor.hc -o out/tree_visitor
 
-./binary_search
-./binary_tree
-./bubble_sort
-./quicksort
-./tree_visitor
+out/binary_search
+out/binary_tree
+out/bubble_sort
+out/quicksort
+out/tree_visitor
 
 rm -rf out
